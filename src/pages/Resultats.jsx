@@ -1,134 +1,129 @@
-// Nombre de nœuds du réseau IEEE 14
-const NB_NOEUDS = 14;
+export default function Resultats({ resultats, erreur, branchFlows, loading }) {
+  // 1. État de chargement (Spinner)
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center p-20 text-blue-600 min-h-[50vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+        <p className="font-semibold text-lg">Calcul de Newton-Raphson en cours...</p>
+        <p className="text-sm text-slate-500 mt-2">Résolution des équations du réseau</p>
+      </div>
+    );
+  }
 
-// Composant carte réutilisable (cohérent avec les autres pages)
-function Carte({ titre, sousTitre, badge, children }) {
-  return (
-    <section className="mb-6 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-white to-slate-50/50">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-8 w-1 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600 shrink-0" />
-          <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-semibold text-slate-800 truncate">
-              {titre}
-            </h2>
-            {sousTitre && (
-              <p className="text-xs text-slate-500 truncate">{sousTitre}</p>
-            )}
-          </div>
+  // 2. Gestion des erreurs
+  if (erreur) {
+    return (
+      <div className="p-10 text-red-600 bg-red-50 border border-red-200 rounded-lg m-6 max-w-4xl mx-auto shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-red-200 text-red-700 font-bold">!</span>
+          <h2 className="text-lg font-bold">Erreur de calcul</h2>
         </div>
-        {badge && (
-          <span className="text-[11px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-            {badge}
-          </span>
-        )}
-      </header>
-      <div className="p-3 sm:p-4">{children}</div>
-    </section>
-  );
-}
-
-// Page d'affichage des résultats
-export default function Resultats() {
-  return (
-    <div className="mx-auto max-w-6xl">
-      {/* En-tête de page */}
-      <div className="mb-6 sm:mb-8">
-        <div className="flex items-center gap-2 text-xs font-medium text-blue-600 mb-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-          Répartition de puissance
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-          Résultats <span className="text-blue-600">IEEE 14</span>
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Valeurs calculées aux nœuds après convergence du load-flow.
+        <p className="font-mono text-sm bg-white p-3 rounded border border-red-100">{erreur}</p>
+        <p className="text-sm mt-4 text-red-500">
+          Vérifiez que le backend Python est bien lancé (<code>uvicorn main:app --reload</code>) et que les données saisies sont valides.
         </p>
       </div>
+    );
+  }
 
-      {/* Bandeau d'état vide */}
-      <div className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100/40 p-4 sm:p-5 flex items-start gap-3">
-        <div className="h-9 w-9 shrink-0 rounded-xl bg-amber-500/10 flex items-center justify-center">
-          <span className="text-amber-600 text-lg">⏳</span>
+  // 3. Aucun résultat
+  if (!resultats) {
+    return (
+      <div className="p-10 text-slate-500 text-center min-h-[50vh] flex flex-col justify-center items-center">
+        <div className="text-4xl mb-4">⚡</div>
+        <h2 className="text-lg font-semibold text-slate-700 mb-2">Aucune simulation</h2>
+        <p>Remplissez les données dans l'onglet Saisie et lancez le Load Flow.</p>
+      </div>
+    );
+  }
+
+  // 4. Affichage des résultats
+  return (
+    <div className="max-w-6xl mx-auto p-6 space-y-8">
+      
+      {/* Bandeau de succès */}
+      <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-green-200 text-green-700 font-bold">✓</span>
+          <span className="font-semibold text-lg">Convergence atteinte</span>
         </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-amber-900">
-            Aucun calcul exécuté
-          </p>
-          <p className="text-xs text-amber-800/80 mt-0.5">
-            Les résultats s'afficheront après l'intégration du calcul de répartition de puissance (Newton-Raphson).
-          </p>
-        </div>
+        <span className="text-sm font-medium bg-green-100 px-3 py-1 rounded-full">
+          Méthode : Newton-Raphson
+        </span>
       </div>
 
-      {/* Statistiques résumé */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 sm:mb-8">
-        {[
-          { label: "Itérations", value: "—", color: "text-blue-600" },
-          { label: "Convergence", value: "—", color: "text-emerald-600" },
-          { label: "P pertes (p.u.)", value: "—", color: "text-indigo-600" },
-          { label: "Q pertes (p.u.)", value: "—", color: "text-amber-600" },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4"
-          >
-            <p className="text-[11px] uppercase tracking-wider text-slate-400 font-medium">
-              {s.label}
-            </p>
-            <p className={`mt-1 text-lg sm:text-xl font-bold ${s.color}`}>
-              {s.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Carte : valeurs aux nœuds */}
-      <Carte
-        titre="Valeurs aux nœuds"
-        sousTitre="Tensions et puissances injectées"
-        badge={`${NB_NOEUDS} bus`}
-      >
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[600px] border-collapse text-xs sm:text-sm">
-            <thead>
-              <tr className="bg-slate-50">
-                {["Nœud", "P (p.u.)", "Q (p.u.)", "V (p.u.)", "θ (°)"].map((c) => (
-                  <th
-                    key={c}
-                    className="border-b border-slate-200 px-3 py-2.5 font-semibold text-slate-600 text-center whitespace-nowrap"
-                  >
-                    {c}
-                  </th>
-                ))}
+      {/* ==================================================== */}
+      {/* TABLEAU 1 : BILAN DE PUISSANCE AUX NŒUDS             */}
+      {/* ==================================================== */}
+      <section>
+        <h2 className="text-xl font-bold text-slate-800 mb-4">1. Bilan de Puissance aux Nœuds</h2>
+        <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
+          <table className="w-full text-sm text-center">
+            <thead className="bg-slate-100 font-semibold text-slate-700">
+              <tr>
+                <th className="p-3 border-b">Bus</th>
+                <th className="p-3 border-b">Tension V (p.u.)</th>
+                <th className="p-3 border-b">Angle θ (°)</th>
+                <th className="p-3 border-b">P injecté (MW)</th>
+                <th className="p-3 border-b">Q injecté (MVAr)</th>
               </tr>
             </thead>
-
             <tbody>
-              {Array.from({ length: NB_NOEUDS }, (_, i) => (
-                <tr
-                  key={i}
-                  className={`transition-colors ${
-                    i % 2 === 0 ? "bg-white" : "bg-slate-50/40"
-                  } hover:bg-blue-50/60`}
-                >
-                  <td className="border-b border-slate-100 px-3 py-2 text-center font-medium text-slate-500">
-                    {i + 1}
+              {resultats.map((r) => (
+                <tr key={r.bus} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-2 border-b font-bold text-slate-600">{r.bus}</td>
+                  <td className="p-2 border-b font-mono text-blue-700">{r.V.toFixed(4)}</td>
+                  <td className="p-2 border-b font-mono text-slate-600">{r.theta.toFixed(2)}</td>
+                  <td className={`p-2 border-b font-mono font-semibold ${r.P_MW > 0 ? "text-emerald-600" : "text-slate-600"}`}>
+                    {r.P_MW.toFixed(2)}
                   </td>
-                  {Array.from({ length: 4 }, (_, j) => (
-                    <td
-                      key={j}
-                      className="border-b border-slate-100 px-3 py-2 text-center text-slate-300"
-                    >
-                      —
-                    </td>
-                  ))}
+                  <td className={`p-2 border-b font-mono font-semibold ${r.Q_MVAr > 0 ? "text-amber-500" : "text-slate-600"}`}>
+                    {r.Q_MVAr.toFixed(2)}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </Carte>
+      </section>
+
+      {/* ==================================================== */}
+      {/* TABLEAU 2 : FLUX ET PERTES DANS LES LIGNES           */}
+      {/* ==================================================== */}
+      {branchFlows && branchFlows.length > 0 && (
+        <section>
+          <h2 className="text-xl font-bold text-slate-800 mb-4">2. Transits et Pertes de Lignes</h2>
+          <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
+            <table className="w-full text-sm text-center">
+              <thead className="bg-slate-100 font-semibold text-slate-700">
+                <tr>
+                  <th className="p-3 border-b">Ligne</th>
+                  <th className="p-3 border-b text-blue-600">P Départ (MW)</th>
+                  <th className="p-3 border-b text-blue-600">Q Départ (MVAr)</th>
+                  <th className="p-3 border-b text-blue-600">P Arrivée (MW)</th>
+                  <th className="p-3 border-b text-blue-600">Q Arrivée (MVAr)</th>
+                  <th className="p-3 border-b text-red-600">Pertes (MW)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branchFlows.map((f, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-2 border-b font-bold text-slate-600">{f.from} → {f.to}</td>
+                    <td className="p-2 border-b font-mono">{f.p_from_MW.toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{f.q_from_MVAr.toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{f.p_to_MW.toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{f.q_to_MVAr.toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono font-bold text-red-600 bg-red-50">
+                      {f.loss_MW.toFixed(3)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
     </div>
   );
 }

@@ -1,90 +1,140 @@
-import { NavLink, BrowserRouter, Routes, Route } from "react-router-dom";
+import { useState } from "react";
 import Saisie from "./pages/Saisie";
 import Resultats from "./pages/Resultats";
-import TestAddition from "./TestAddition";
-// import Graphique from "./pages/Graphique";
-// Lien de navigation réutilisable
-function LienNav({ to, children }) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `relative px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-          isActive
-            ? "text-white bg-blue-600 shadow-sm shadow-blue-600/30"
-            : "text-slate-600 hover:text-blue-700 hover:bg-blue-50"
-        }`
-      }
-    >
-      {children}
-    </NavLink>
-  );
-}
+import Etapes from "./pages/Etapes";
+import Stabilite from "./pages/Stabilite";
+import Schema from "./pages/Schema";
 
-// Composant principal
 export default function App() {
+  const [loading, setLoading] = useState(false);
+
+  // --- États persistants (ils gardent leur valeur entre les onglets) ---
+  const [resultats, setResultats] = useState(null);
+  const [history, setHistory] = useState(null);
+  const [erreur, setErreur] = useState(null);
+  const [ybusData, setYbusData] = useState(null);
+  const [branchFlows, setBranchFlows] = useState(null);
+  const [stabilityData, setStabilityData] = useState(null);
+
+  // --- Navigation ---
+  const [page, setPage] = useState("saisie");
+
+  // ============================================================
+  // LANCEMENT DU LOAD FLOW
+  // ============================================================
+  const lancerSimulation = async (buses, branches) => {
+    // ON NE VIDE PLUS : setResultats(null), setHistory(null), etc.
+    // On efface juste l'erreur précédente
+    setErreur(null);
+    setLoading(true);
+    setPage("resultats"); // On va sur l'onglet résultats pour voir le spinner
+
+    try {
+      const reponse = await fetch("http://127.0.0.1:8000/api/loadflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buses, branches }),
+      });
+
+      if (!reponse.ok) {
+        const errData = await reponse.json();
+        throw new Error(errData.detail || "Erreur lors du calcul Load Flow");
+      }
+
+      const data = await reponse.json();
+      
+      // On écrase avec les nouveaux résultats seulement si succès
+      setResultats(data.results);
+      setHistory(data.history);
+      setYbusData(data.ybus);
+      setBranchFlows(data.branch_flows);
+      
+      setLoading(false);
+    } catch (err) {
+      setErreur(err.message);
+      // On garde les anciens resultats/history en cas d'erreur !
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // LANCEMENT DE LA STABILITÉ
+  // ============================================================
+  const lancerStabilite = async (buses, branches, faultBus) => {
+    setLoading(true);
+    setPage("stabilite");
+
+    try {
+      const reponse = await fetch("http://127.0.0.1:8000/api/stability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buses, branches, fault_bus: faultBus, duration: 5.0 }),
+      });
+
+      if (!reponse.ok) {
+        const errData = await reponse.json();
+        throw new Error(errData.detail || "Erreur de stabilité");
+      }
+
+      const data = await reponse.json();
+      setStabilityData(data);
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      alert("Erreur de stabilité : " + err.message);
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // BOUTON DE RÉINITIALISATION MANUELLE
+  // ============================================================
+  const reinitialiserDonnees = () => {
+    if (window.confirm("Voulez-vous vraiment effacer toutes les données calculées ?")) {
+      setResultats(null);
+      setHistory(null);
+      setYbusData(null);
+      setBranchFlows(null);
+      setStabilityData(null);
+      setErreur(null);
+      setPage("saisie");
+    }
+  };
+
+  // ============================================================
+  // RENDU
+  // ============================================================
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/40 text-slate-800 flex flex-col">
+    <div className="min-h-screen bg-slate-100 text-slate-800">
+      <nav className="bg-white border-b border-slate-200 px-8 py-4 flex items-center gap-8 shadow-sm">
+        <h1 className="text-xl font-bold text-blue-700 tracking-tight">SPARK-Flow</h1>
+        
+        <div className="flex gap-6 flex-1">
+          <button onClick={() => setPage("saisie")} className={page === "saisie" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Saisie</button>
+          <button onClick={() => setPage("schema")} className={page === "schema" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Schéma Réseau</button>
+          <button onClick={() => setPage("resultats")} className={page === "resultats" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Résultats</button>
+          <button onClick={() => setPage("etapes")} className={page === "etapes" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Étapes</button>
+          <button onClick={() => setPage("stabilite")} className={page === "stabilite" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Stabilité</button>
+        </div>
 
-        {/* Barre de navigation sticky */}
-        <header className="sticky top-0 z-50 backdrop-blur-md bg-white/80 border-b border-slate-200/70">
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        {/* BOUTON DE RESET */}
+        {(resultats || stabilityData) && (
+          <button 
+            onClick={reinitialiserDonnees}
+            className="text-xs text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md font-semibold transition-colors"
+          >
+            Réinitialiser
+          </button>
+        )}
+      </nav>
 
-            {/* Logo + nom */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-500/20">
-                <span className="text-white font-bold text-sm">G</span>
-              </div>
-              <div className="leading-tight">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900">
-                  GridFACTS <span className="text-blue-600">Studio</span>
-                </h1>
-                <p className="hidden sm:block text-[10px] uppercase tracking-wider text-slate-400 font-medium">
-                  IEEE 14 — Load Flow
-                </p>
-              </div>
-            </div>
-
-            {/* Liens */}
-            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
-              <LienNav to="/">Saisie</LienNav>
-              <LienNav to="/resultats">Résultats</LienNav>
-              {/* <LienNav to="/graphique">Graphique</LienNav> */}
-              <LienNav to="/test">Test</LienNav>
-            </div>
-
-            {/* Badge statut (desktop) */}
-            <div className="hidden lg:flex items-center gap-2 text-xs text-slate-500">
-              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-              API connectée
-            </div>
-          </nav>
-        </header>
-
-        {/* Contenu principal */}
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <Routes>
-            <Route path="/" element={<Saisie />} />
-            <Route path="/resultats" element={<Resultats />} />
-            {/* <Route path="/Graphique" element={<Graphique />} /> */}
-            <Route path="/test" element={<TestAddition />} />
-          </Routes>
-        </main>
-
-        {/* Footer discret */}
-        <footer className="border-t border-slate-200/70 bg-white/50 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
-            <p>© 2026 GridFACTS Studio — IEEE 14 bus system</p>
-            <p>
-              Front <span className="text-blue-600 font-medium">React</span>
-              {" · "}
-              Back <span className="text-emerald-600 font-medium">FastAPI</span>
-            </p>
-          </div>
-        </footer>
-
-      </div>
-    </BrowserRouter>
+      <main className="p-6">
+        {page === "saisie" && <Saisie onCalculer={lancerSimulation} onStabilite={lancerStabilite} />}
+        {page === "schema" && <Schema resultats={resultats} />}
+        {page === "resultats" && <Resultats resultats={resultats} erreur={erreur} branchFlows={branchFlows} loading={loading} />}
+        {page === "etapes" && <Etapes history={history} ybusData={ybusData} branchFlows={branchFlows} />}
+        {page === "stabilite" && <Stabilite data={stabilityData} />}
+      </main>
+    </div>
   );
 }

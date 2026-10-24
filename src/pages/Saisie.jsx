@@ -1,305 +1,343 @@
 import { useState } from "react";
 
-// ---------- Carte de section ----------
-function Carte({ titre, sousTitre, badge, children }) {
-  return (
-    <section className="mb-6 sm:mb-8 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-white to-slate-50/50">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-8 w-1 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600 shrink-0" />
-          <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-semibold text-slate-800 truncate">{titre}</h2>
-            {sousTitre && <p className="text-xs text-slate-500 truncate">{sousTitre}</p>}
-          </div>
-        </div>
-        {badge && (
-          <span className="text-[11px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-            {badge}
-          </span>
-        )}
-      </header>
-      <div className="p-3 sm:p-4">{children}</div>
-    </section>
-  );
-}
+// ============================================================
+// DONNÉES DE RÉFÉRENCE : Réseau IEEE 14-Bus (MATPOWER)
+// ============================================================
+const DONNEES_IEEE14 = {
+  buses: [
+    [1, 3, 0, 0, 1.06, 0],
+    [2, 2, 18.3, 0, 1.045, 0],
+    [3, 2, -94.2, 0, 1.01, 0],
+    [4, 1, -47.8, 3.9, 1.0, 0],
+    [5, 1, -7.6, -1.6, 1.0, 0],
+    [6, 2, -11.2, 0, 1.07, 0],
+    [7, 1, 0, 0, 1.0, 0],
+    [8, 2, 0, 0, 1.09, 0],
+    [9, 1, -29.5, -16.6, 1.0, 0],
+    [10, 1, -9.0, -5.8, 1.0, 0],
+    [11, 1, -3.5, -1.8, 1.0, 0],
+    [12, 1, -6.1, -1.6, 1.0, 0],
+    [13, 1, -13.5, -1.8, 1.0, 0],
+    [14, 1, -14.9, -5.0, 1.0, 0]
+  ],
+  branches: [
+    [1, 2, 0.01938, 0.05917], [1, 5, 0.05403, 0.22304],
+    [2, 3, 0.04699, 0.19797], [2, 4, 0.05811, 0.17632],
+    [2, 5, 0.05695, 0.17388], [3, 4, 0.06701, 0.17103],
+    [4, 5, 0.01335, 0.04211], [4, 7, 0.0, 0.20912],
+    [4, 9, 0.0, 0.55618], [5, 6, 0.0, 0.25202],
+    [6, 11, 0.09498, 0.19890], [6, 12, 0.12291, 0.25581],
+    [6, 13, 0.06615, 0.13027], [7, 8, 0.0, 0.17615],
+    [7, 9, 0.0, 0.11001], [9, 10, 0.03181, 0.08450],
+    [9, 14, 0.12711, 0.27038], [10, 11, 0.08205, 0.19207],
+    [12, 13, 0.22092, 0.19988], [13, 14, 0.17093, 0.34802]
+  ]
+};
 
-// Styles réutilisables
-const inp = "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-center text-xs sm:text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
-const sel = "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-center text-xs sm:text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 cursor-pointer";
-const th = "border-b border-slate-200 px-2 py-2 font-semibold text-slate-600 text-center text-xs sm:text-sm whitespace-nowrap";
-const td = "border-b border-slate-100 p-1";
+const getTypeString = (typeNum) => {
+  if (typeNum === 3) return "Slack";
+  if (typeNum === 2) return "PV";
+  return "PQ";
+};
 
-const champsModifiables = {
+// ============================================================
+// STYLES RÉUTILISABLES (Tailwind)
+// ============================================================
+const inputStyle = "w-full rounded border border-slate-300 bg-white px-2 py-1 text-center text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed";
+const selectStyle = "w-full rounded border border-slate-300 bg-white px-2 py-1 text-center text-xs focus:border-blue-500 cursor-pointer";
+const thStyle = "border-b border-slate-300 p-2 text-xs font-semibold text-slate-700 bg-slate-100";
+const tdStyle = "p-1 border-b border-slate-100";
+
+// Règles de modification selon le type de bus
+const reglesModification = {
   Slack: ["V", "theta"],
   PV: ["P", "V"],
   PQ: ["P", "Q"],
 };
 
-// Vérifie si une cellule peut être modifiée
-function peutModifier(typeBus, colonne) {
-  return champsModifiables[typeBus]?.includes(colonne) ?? false;
-}
-
-
-
-export default function Saisie() {
-  // Un seul état global pour tout le formulaire
+// ============================================================
+// COMPOSANT PRINCIPAL : SAISIE
+// ============================================================
+export default function Saisie({ onCalculer, onStabilite }) {
   const [form, setForm] = useState({});
+  const [faultBus, setFaultBus] = useState(2);
 
-  // Fonction magique qui met à jour l'état selon le nom du champ
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const isEditable = (typeBus, champ) => {
+    return reglesModification[typeBus]?.includes(champ) ?? false;
+  };
+
+  const chargerTestStandard = () => {
+    const newForm = {};
+    DONNEES_IEEE14.buses.forEach((bus, i) => {
+      const idx = i + 1;
+      const [, typeNum, P, Q, V, theta] = bus;
+      newForm[`n${idx}_type`] = getTypeString(typeNum);
+      newForm[`n${idx}_p`] = P;
+      newForm[`n${idx}_q`] = Q;
+      newForm[`n${idx}_v`] = V;
+      newForm[`n${idx}_theta`] = theta;
+    });
+    DONNEES_IEEE14.branches.forEach((branch, i) => {
+      const idx = i + 1;
+      const [dep, arr, r, x] = branch;
+      newForm[`b${idx}_dep`] = dep;
+      newForm[`b${idx}_arr`] = arr;
+      newForm[`b${idx}_r`] = r;
+      newForm[`b${idx}_x`] = x;
+    });
+    setForm(newForm);
+  };
+
+  // ============================================================
+  // PRÉPARATION DU PAYLOAD (CORRIGÉ AVEC 6 PARAMÈTRES POUR LES BRANCHES)
+  // ============================================================
+  const extraireDonnees = () => {
+    const buses = [];
+    const branches = [];
+
+    // Extraction des nœuds
+    for (let i = 1; i <= 14; i++) {
+      const typeStr = form[`n${i}_type`] || "PQ";
+      const typeNum = typeStr === "Slack" ? 3 : typeStr === "PV" ? 2 : 1;
+      
+      const P = Number(form[`n${i}_p`] || 0) / 100;
+      const Q = Number(form[`n${i}_q`] || 0) / 100;
+      const V = Number(form[`n${i}_v`] || 1.0);
+      const theta = Number(form[`n${i}_theta`] || 0);
+
+      buses.push([i, typeNum, P, Q, V, theta]);
+    }
+
+    // Extraction des branches (AVEC B = 0 ET TAP = 0 PAR DÉFAUT)
+    for (let i = 1; i <= 20; i++) {
+      if (form[`b${i}_dep`] && form[`b${i}_arr`]) {
+        branches.push([
+          Number(form[`b${i}_dep`]),
+          Number(form[`b${i}_arr`]),
+          Number(form[`b${i}_r`] || 0),
+          Number(form[`b${i}_x`] || 0.01),
+          0, // Susceptance Shunt (B)
+          0  // Tap Ratio (0 = nominal)
+        ]);
+      }
+    }
+
+    return { buses, branches };
+  };
+
+  const lancerCalcul = () => {
+    const { buses, branches } = extraireDonnees();
+    onCalculer(buses, branches);
+  };
+
+  const lancerStabilite = () => {
+    const { buses, branches } = extraireDonnees();
+    onStabilite(buses, branches, Number(faultBus));
+  };
+
+  // ============================================================
+  // RENDU JSX
+  // ============================================================
   return (
-    <div className="mx-auto max-w-5xl">
-      {/* En-tête */}
-      <div className="mb-6 sm:mb-8">
-        <div className="flex items-center gap-2 text-xs font-medium text-blue-600 mb-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-          Paramètres du réseau
+    <div className="max-w-6xl mx-auto p-6">
+      <header className="mb-8 border-b pb-4 flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-light text-slate-800">
+            SPARK-Flow <span className="font-bold text-blue-600">Solver</span>
+          </h1>
+          <p className="text-sm text-slate-500 mt-2">
+            Module de saisie (Format IEEE 14-Bus)
+          </p>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-          Saisie de données — <span className="text-blue-600">IEEE 14</span>
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Renseignez les grandeurs électriques des nœuds et des branches du réseau.
-        </p>
+        <button
+          onClick={chargerTestStandard}
+          className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow hover:bg-emerald-700 transition"
+        >
+          ⚡ Charger le test IEEE 14 (Standard)
+        </button>
+      </header>
+
+      <h2 className="text-lg font-semibold mb-3 text-slate-700">
+        1. Paramètres des Nœuds (Buses)
+      </h2>
+      <p className="text-xs text-slate-500 mb-2">
+        P et Q sont les puissances nettes injectées (MW/MVAr). Mettez une valeur négative pour une charge.
+      </p>
+      <div className="overflow-x-auto border rounded-lg mb-8 shadow-sm">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={thStyle}>Bus</th>
+              <th className={thStyle}>Type</th>
+              <th className={thStyle}>P (MW)</th>
+              <th className={thStyle}>Q (MVAr)</th>
+              <th className={thStyle}>V (p.u.)</th>
+              <th className={thStyle}>θ (°)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[1,2,3,4,5,6,7,8,9,10,11,12,13,14].map((num) => (
+              <tr key={num} className={num % 2 === 0 ? "bg-slate-50" : ""}>
+                <td className="text-center font-bold text-slate-500">{num}</td>
+                <td className={tdStyle}>
+                  <select
+                    name={`n${num}_type`}
+                    value={form[`n${num}_type`] ?? ""}
+                    onChange={handleChange}
+                    className={selectStyle}
+                  >
+                    <option value="">--</option>
+                    <option>Slack</option>
+                    <option>PV</option>
+                    <option>PQ</option>
+                  </select>
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    name={`n${num}_p`}
+                    value={form[`n${num}_p`] ?? ""}
+                    onChange={handleChange}
+                    disabled={!isEditable(form[`n${num}_type`], "P")}
+                    className={inputStyle}
+                  />
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    name={`n${num}_q`}
+                    value={form[`n${num}_q`] ?? ""}
+                    onChange={handleChange}
+                    disabled={!isEditable(form[`n${num}_type`], "Q")}
+                    className={inputStyle}
+                  />
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    name={`n${num}_v`}
+                    value={form[`n${num}_v`] ?? ""}
+                    onChange={handleChange}
+                    disabled={!isEditable(form[`n${num}_type`], "V")}
+                    className={inputStyle}
+                  />
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    name={`n${num}_theta`}
+                    value={form[`n${num}_theta`] ?? ""}
+                    onChange={handleChange}
+                    disabled={!isEditable(form[`n${num}_type`], "theta")}
+                    className={inputStyle}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <Carte titre="Nœuds" badge="14 bus">
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[700px] border-collapse">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className={`${th} w-12`}>N°</th>
-                <th className={th}>Type</th>
-                <th className={th}>P (p.u.)</th>
-                <th className={th}>Q (p.u.)</th>
-                <th className={th}>V (p.u.)</th>
-                <th className={th}>θ (°)</th>
+      <h2 className="text-lg font-semibold mb-3 text-slate-700">
+        2. Lignes de Transport (Branches)
+      </h2>
+      <div className="overflow-x-auto border rounded-lg mb-8 shadow-sm">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={thStyle}>Bus Départ</th>
+              <th className={thStyle}>Bus Arrivée</th>
+              <th className={thStyle}>R (p.u.)</th>
+              <th className={thStyle}>X (p.u.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map((num) => (
+              <tr key={num} className={num % 2 === 0 ? "bg-slate-50" : ""}>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    name={`b${num}_dep`}
+                    value={form[`b${num}_dep`] ?? ""}
+                    onChange={handleChange}
+                    className={inputStyle}
+                    placeholder={num === 1 ? "1" : ""}
+                  />
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    name={`b${num}_arr`}
+                    value={form[`b${num}_arr`] ?? ""}
+                    onChange={handleChange}
+                    className={inputStyle}
+                    placeholder={num === 1 ? "2" : ""}
+                  />
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    step="any"
+                    name={`b${num}_r`}
+                    value={form[`b${num}_r`] ?? ""}
+                    onChange={handleChange}
+                    className={inputStyle}
+                    placeholder={num === 1 ? "0.019" : ""}
+                  />
+                </td>
+                <td className={tdStyle}>
+                  <input
+                    type="number"
+                    step="any"
+                    name={`b${num}_x`}
+                    value={form[`b${num}_x`] ?? ""}
+                    onChange={handleChange}
+                    className={inputStyle}
+                    placeholder={num === 1 ? "0.059" : ""}
+                  />
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">1</td>
-                <td className={td}><select name="n1_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n1_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n1_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n1_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n1_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">2</td>
-                <td className={td}><select name="n2_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n2_p" value={form.n2_p ?? ""} disabled={!peutModifier(form.n2_type, "P")} className={inp} onChange={handleChange} /></td>
-                <td className={td}><input type="number" name="n2_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n2_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n2_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">3</td>
-                <td className={td}><select name="n3_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n3_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n3_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n3_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n3_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">4</td>
-                <td className={td}><select name="n4_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n4_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n4_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n4_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n4_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">5</td>
-                <td className={td}><select name="n5_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n5_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n5_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n5_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n5_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">6</td>
-                <td className={td}><select name="n6_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n6_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n6_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n6_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n6_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">7</td>
-                <td className={td}><select name="n7_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n7_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n7_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n7_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n7_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">8</td>
-                <td className={td}><select name="n8_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n8_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n8_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n8_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n8_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">9</td>
-                <td className={td}><select name="n9_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n9_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n9_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n9_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n9_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">10</td>
-                <td className={td}><select name="n10_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n10_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n10_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n10_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n10_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">11</td>
-                <td className={td}><select name="n11_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n11_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n11_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n11_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n11_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">12</td>
-                <td className={td}><select name="n12_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n12_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n12_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n12_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n12_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">13</td>
-                <td className={td}><select name="n13_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n13_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n13_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n13_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n13_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">14</td>
-                <td className={td}><select name="n14_type" onChange={handleChange} className={sel}><option value="">--</option><option>Slack</option><option>PV</option><option>PQ</option></select></td>
-                <td className={td}><input type="number" name="n14_p" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n14_q" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n14_v" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="n14_theta" onChange={handleChange} className={inp} /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </Carte>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      {/* TABLEAU BRANCHES  */}
-      <Carte titre="Branches" badge="14 lignes">
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full min-w-[500px] border-collapse">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className={`${th} w-12`}>N°</th>
-                <th className={th}>Nœud arrivée</th>
-                <th className={th}>R (p.u.)</th>
-                <th className={th}>X (p.u.)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">1</td>
-                <td className={td}><input type="number" name="b1_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b1_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b1_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">2</td>
-                <td className={td}><input type="number" name="b2_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b2_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b2_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">3</td>
-                <td className={td}><input type="number" name="b3_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b3_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b3_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">4</td>
-                <td className={td}><input type="number" name="b4_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b4_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b4_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">5</td>
-                <td className={td}><input type="number" name="b5_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b5_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b5_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">6</td>
-                <td className={td}><input type="number" name="b6_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b6_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b6_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">7</td>
-                <td className={td}><input type="number" name="b7_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b7_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b7_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">8</td>
-                <td className={td}><input type="number" name="b8_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b8_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b8_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">9</td>
-                <td className={td}><input type="number" name="b9_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b9_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b9_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">10</td>
-                <td className={td}><input type="number" name="b10_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b10_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b10_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">11</td>
-                <td className={td}><input type="number" name="b11_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b11_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b11_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">12</td>
-                <td className={td}><input type="number" name="b12_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b12_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b12_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">13</td>
-                <td className={td}><input type="number" name="b13_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b13_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b13_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-              <tr className="bg-slate-50/40 hover:bg-blue-50/60">
-                <td className="text-center font-bold text-slate-500">14</td>
-                <td className={td}><input type="number" name="b14_arr" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b14_r" onChange={handleChange} className={inp} /></td>
-                <td className={td}><input type="number" name="b14_x" onChange={handleChange} className={inp} /></td>
-              </tr>
-            </tbody>
-          </table>
+      <div className="flex flex-col md:flex-row justify-between items-center bg-white border border-slate-200 p-6 rounded-lg shadow-sm gap-6">
+        <div className="flex items-center gap-4 bg-purple-50 p-3 rounded-lg border border-purple-100">
+          <label className="text-sm font-semibold text-purple-900">
+            Bus pour le défaut (Stabilité) :
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="14"
+            value={faultBus}
+            onChange={(e) => setFaultBus(e.target.value)}
+            className="w-16 rounded border border-purple-300 bg-white p-2 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
         </div>
-      </Carte>
+
+        <div className="flex gap-4">
+          <button
+            onClick={lancerStabilite}
+            className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow hover:bg-purple-700 transition flex items-center gap-2"
+          >
+            📈 Simuler Stabilité
+          </button>
+          
+          <button
+            onClick={lancerCalcul}
+            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition flex items-center gap-2"
+          >
+            ⚡ Lancer Load Flow
+          </button>
+        </div>
+      </div>
 
     </div>
   );
