@@ -30,7 +30,7 @@ const BRANCHES = [
   [7, 8], [7, 9], [9, 10], [9, 14], [10, 11], [12, 13], [13, 14]
 ];
 
-export default function Schema({ resultats, svcInfo }) {
+export default function Schema({ resultats, facts, solars }) {
   const [selectedBus, setSelectedBus] = useState(null);
   const [showValues, setShowValues] = useState(true);
 
@@ -56,6 +56,24 @@ export default function Schema({ resultats, svcInfo }) {
     if (type === "Slack") return "#ef4444"; // Rouge
     if (type === "PV") return "#10b981";    // Vert
     return "#3b82f6";                       // Bleu (PQ)
+  };
+
+  // Fonction pour trouver le nom du dispositif FACTS (SVC, STATCOM, UPFC) sur un bus
+  const getFactOnBus = (busId) => {
+    return facts?.find(f => f.bus_id === busId && f.type !== "TCSC");
+  };
+
+  // Fonction pour trouver le TCSC sur une ligne
+  const getTcscOnLine = (from, to) => {
+    // On cherche si un TCSC a été configuré pour cette ligne spécifique
+    // (L'index de la branche correspond à l'ordre dans BRANCHES)
+    const idx = BRANCHES.findIndex(([f, t]) => (f === from && t === to) || (f === to && t === from));
+    return facts?.find(f => f.type === "TCSC" && f.branch_index === idx);
+  };
+
+  // Fonction pour trouver le Solaire sur un bus
+  const getSolarOnBus = (busId) => {
+    return solars?.find(s => s.bus_id === busId);
   };
 
   return (
@@ -111,11 +129,30 @@ export default function Schema({ resultats, svcInfo }) {
               const p1 = busData[from];
               const p2 = busData[to];
               const isHighlighted = selectedBus && (selectedBus === from || selectedBus === to);
+              
+              // Détection TCSC sur la ligne
+              const tcsc = getTcscOnLine(from, to);
+              const hasTcsc = !!tcsc;
+
               return (
                 <g key={idx}>
-                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={isHighlighted ? "#0f7a8a" : "#94a3b8"} strokeWidth={isHighlighted ? 3.5 : 2} className="transition-all duration-300" />
+                  <line 
+                    x1={p1.x} y1={p1.y} 
+                    x2={p2.x} y2={p2.y} 
+                    stroke={isHighlighted ? "#0f7a8a" : (hasTcsc ? "#9333ea" : "#94a3b8")} 
+                    strokeWidth={isHighlighted ? 3.5 : (hasTcsc ? 3 : 2)} 
+                    className="transition-all duration-300" 
+                  />
                   <circle cx={p1.x} cy={p1.y} r={3} fill={isHighlighted ? "#0f7a8a" : "#64748b"} />
                   <circle cx={p2.x} cy={p2.y} r={3} fill={isHighlighted ? "#0f7a8a" : "#64748b"} />
+                  
+                  {/* Badge TCSC sur la ligne */}
+                  {hasTcsc && (
+                    <g transform={`translate(${(p1.x + p2.x)/2 - 20}, ${(p1.y + p2.y)/2 - 10})`} className="pointer-events-none">
+                      <rect x="0" y="0" width="40" height="14" fill="#9333ea" rx="3" className="shadow-sm" />
+                      <text x="20" y="10" textAnchor="middle" fill="white" fontSize="7.5" fontWeight="bold">TCSC</text>
+                    </g>
+                  )}
                 </g>
               );
             })}
@@ -127,7 +164,10 @@ export default function Schema({ resultats, svcInfo }) {
               const color = getBusColor(bus.type);
               const barWidth = 40;
               const barHeight = 6;
-              const hasSVC = svcInfo && svcInfo.bus_id === id;
+              
+              // Détection des dispositifs sur le bus
+              const fact = getFactOnBus(id);
+              const solar = getSolarOnBus(id);
 
               return (
                 <g key={id} onClick={() => setSelectedBus(isSelected ? null : id)} className="cursor-pointer group">
@@ -143,11 +183,19 @@ export default function Schema({ resultats, svcInfo }) {
                     {id}
                   </text>
 
-                  {/* NOUVEAU : Badge SVC */}
-                  {hasSVC && (
+                  {/* Badge FACTS (SVC, STATCOM, UPFC) */}
+                  {fact && (
                     <g transform={`translate(${bus.x + 15}, ${bus.y - 22})`} className="pointer-events-none">
                       <rect x="0" y="0" width="26" height="14" fill="#10b981" rx="3" className="shadow-sm" />
-                      <text x="13" y="10" textAnchor="middle" fill="white" fontSize="7.5" fontWeight="bold">SVC</text>
+                      <text x="13" y="10" textAnchor="middle" fill="white" fontSize="7.5" fontWeight="bold">{fact.type === "SVC" ? "SVC" : (fact.type === "STATCOM" ? "STAT" : "UPFC")}</text>
+                    </g>
+                  )}
+
+                  {/* Badge Solaire */}
+                  {solar && (
+                    <g transform={`translate(${bus.x - 40}, ${bus.y - 22})`} className="pointer-events-none">
+                      <rect x="0" y="0" width="26" height="14" fill="#f59e0b" rx="3" className="shadow-sm" />
+                      <text x="13" y="10" textAnchor="middle" fill="white" fontSize="7.5" fontWeight="bold">PV</text>
                     </g>
                   )}
 
@@ -193,13 +241,22 @@ export default function Schema({ resultats, svcInfo }) {
               <button onClick={() => setSelectedBus(null)} className="text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full w-7 h-7 flex items-center justify-center transition-colors">×</button>
             </div>
             
-            {svcInfo && svcInfo.bus_id === selectedBus && (
-              <div className="mb-4 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 font-semibold flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span> SVC Actif (B = {svcInfo.susceptance})
+            {/* Liste des dispositifs actifs sur ce bus */}
+            {getFactOnBus(selectedBus) && (
+              <div className="mb-2 p-2 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800 font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span> 
+                {getFactOnBus(selectedBus).type} Actif (Param: {getFactOnBus(selectedBus).param1})
+              </div>
+            )}
+            
+            {getSolarOnBus(selectedBus) && (
+              <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 font-semibold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> 
+                Panneau Solaire Actif (P: {getSolarOnBus(selectedBus).active_power} MW)
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-3 mt-4">
               <div className="flex justify-between items-center p-2.5 bg-blue-50 rounded-lg border border-blue-100">
                 <span className="text-sm text-blue-800 font-medium">Tension</span>
                 <span className="font-mono font-bold text-blue-700">{busData[selectedBus].v.toFixed(4)} <span className="text-xs font-normal">pu</span></span>

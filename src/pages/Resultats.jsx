@@ -89,17 +89,17 @@ export default function Resultats({
   return (
     <div className="max-w-[1600px] mx-auto p-4 space-y-6">
       
-      <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <span className="flex items-center justify-center w-8 h-8 rounded-full bg-green-200 text-green-700 font-bold">✓</span>
           <span className="font-semibold text-lg">Convergence atteinte</span>
         </div>
-        <button onClick={handleApplyAll} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-semibold shadow transition-colors flex items-center gap-2">
-          <span>⚙️</span> Appliquer les modifications
+        <button onClick={handleApplyAll} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-semibold transition-colors flex items-center gap-2">
+           Appliquer les modifications
         </button>
       </div>
 
-      {/* TABLEAU UNIFIÉ */}
+      {/* TABLEAU UNIFIÉ (SANS STATUT) */}
       <section>
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
           <h2 className="text-xl font-bold text-slate-800">Bilan de Puissance et Contrôle des Dispositifs</h2>
@@ -123,7 +123,7 @@ export default function Resultats({
                 <th className="p-3 border-b" rowSpan={2}>P (MW)</th>
                 <th className="p-3 border-b" rowSpan={2}>Q (MVAr)</th>
                 <th className="p-2 border-b border-l border-slate-300 text-emerald-700" colSpan={4}>Dispositif FACTS</th>
-                <th className="p-2 border-b border-l border-slate-300 text-amber-700" colSpan={2}>Solaire</th>
+                <th className="p-2 border-b border-l border-slate-300 text-amber-700" colSpan={1}>Solaire</th>
               </tr>
               <tr>
                 <th className="p-2 border-b border-l border-slate-300 bg-emerald-50/50 text-xs">Type</th>
@@ -131,14 +131,11 @@ export default function Resultats({
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 2</th>
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Ligne (TCSC)</th>
                 <th className="p-2 border-b border-l border-slate-300 bg-amber-50/50 text-xs">P (MW)</th>
-                <th className="p-2 border-b bg-amber-50/50 text-xs">Statut</th>
               </tr>
             </thead>
             <tbody>
               {resultats.map((r) => {
                 const m = modifs[r.bus] || {};
-                const isSolarActive = activeSolars?.some(s => s.bus_id === r.bus);
-                const isFactActive = activeFacts?.some(f => f.bus_id === r.bus || (f.type === "TCSC" && f.branch_index !== undefined));
 
                 let param1Label = "—";
                 if (m.type === "SVC") param1Label = "B (pu)";
@@ -217,14 +214,9 @@ export default function Resultats({
                       )}
                     </td>
 
-                    {/* Colonnes SOLAIRE */}
+                    {/* Colonne SOLAIRE */}
                     <td className="p-2 border-l border-slate-200 bg-amber-50/10">
                       <input type="number" step="1" placeholder="0" value={m.solarP ?? ""} onChange={(e) => handleModif(r.bus, 'solarP', e.target.value)} className="w-20 p-1 border rounded text-xs text-center bg-white" />
-                    </td>
-                    <td className="p-2 bg-amber-50/10 text-xs font-semibold">
-                      {isFactActive && <div className="text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded">Actif</div>}
-                      {isSolarActive && <div className="text-amber-600 bg-amber-100 px-2 py-0.5 rounded mt-1">Actif</div>}
-                      {!isFactActive && !isSolarActive && <span className="text-slate-300">—</span>}
                     </td>
                   </tr>
                 );
@@ -234,7 +226,7 @@ export default function Resultats({
         </div>
       </section>
 
-      {/* TABLEAU 2 : FLUX ET PERTES */}
+      {/* TABLEAU 2 : FLUX ET PERTES (Design d'origine conservé) */}
       {branchFlows && Array.isArray(branchFlows) && branchFlows.length > 0 && (
         <section>
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
@@ -248,27 +240,29 @@ export default function Resultats({
             </div>
           </div>
 
-          <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
-            <table className="w-full text-sm text-center">
-              <thead className="bg-slate-100 font-semibold text-slate-700">
+          <div className="overflow-x-auto rounded-2xl border border-slate-500 bg-white shadow-lg shadow-slate-200/50">
+            <table className="w-full min-w-[760px] text-sm text-center">
+              <thead className="bg-slate-100 font-semibold text-slate-700 text-xs uppercase tracking-wider">
                 <tr>
-                  <th className="p-3 border-b">Ligne</th>
-                  <th className="p-3 border-b text-blue-600">P Départ (MW)</th>
-                  <th className="p-3 border-b text-indigo-600">Q Départ (MVAr)</th>
-                  <th className="p-3 border-b text-blue-600">P Arrivée (MW)</th>
-                  <th className="p-3 border-b text-indigo-600">Q Arrivée (MVAr)</th>
-                  <th className="p-3 border-b text-red-600">Pertes (MW)</th>
+                  <th className="p-4 border-b border-slate-200 text-left">Ligne</th>
+                  <th className="p-4 border-b border-slate-200">P Départ <span className="normal-case text-slate-500">(MW)</span></th>
+                  <th className="p-4 border-b border-slate-200">Q Départ <span className="normal-case text-slate-500">(MVAr)</span></th>
+                  <th className="p-4 border-b border-slate-200">P Arrivée <span className="normal-case text-slate-500">(MW)</span></th>
+                  <th className="p-4 border-b border-slate-200">Q Arrivée <span className="normal-case text-slate-500">(MVAr)</span></th>
+                  <th className="p-4 border-b border-slate-200">Pertes <span className="normal-case text-slate-500">(MW)</span></th>
                 </tr>
               </thead>
               <tbody>
                 {branchFlows.map((f, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="p-2 border-b font-bold text-slate-700">{f.from} → {f.to}</td>
-                    <td className="p-2 border-b font-mono text-emerald-600">{Number(f.p_from_MW).toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono text-orange-500">{Number(f.q_from_MVAr).toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono text-emerald-600">{Number(f.p_to_MW).toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono text-orange-500">{Number(f.q_to_MVAr).toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono font-bold text-red-600 bg-red-50">{Number(f.loss_MW).toFixed(3)}</td>
+                  <tr key={idx} className={`border-b border-slate-100 transition-colors hover:bg-sky-50/70 ${idx % 2 === 1 ? "bg-slate-50/60" : "bg-white"}`}>
+                    <td className="whitespace-nowrap p-3 text-left font-semibold text-slate-800">
+                      <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-sky-500" />{f.from} <span className="text-slate-400">→</span> {f.to}</span>
+                    </td>
+                    <td className="p-3 font-mono font-semibold tabular-nums text-emerald-700">{Number(f.p_from_MW).toFixed(2)}</td>
+                    <td className="p-3 font-mono font-semibold tabular-nums text-amber-600">{Number(f.q_from_MVAr).toFixed(2)}</td>
+                    <td className="p-3 font-mono font-semibold tabular-nums text-emerald-700">{Number(f.p_to_MW).toFixed(2)}</td>
+                    <td className="p-3 font-mono font-semibold tabular-nums text-amber-600">{Number(f.q_to_MVAr).toFixed(2)}</td>
+                    <td className="p-3"><span className="inline-block rounded-lg bg-red-50 px-2.5 py-1 font-mono font-bold tabular-nums text-red-700">{Number(f.loss_MW).toFixed(3)}</span></td>
                   </tr>
                 ))}
               </tbody>
