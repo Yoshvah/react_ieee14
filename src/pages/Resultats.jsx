@@ -72,13 +72,13 @@ export default function Resultats({ resultats, erreur, branchFlows, loading }) {
               {resultats.map((r) => (
                 <tr key={r.bus} className="hover:bg-slate-50 transition-colors">
                   <td className="p-2 border-b font-bold text-slate-600">{r.bus}</td>
-                  <td className="p-2 border-b font-mono text-blue-700">{r.V.toFixed(4)}</td>
-                  <td className="p-2 border-b font-mono text-slate-600">{r.theta.toFixed(2)}</td>
-                  <td className={`p-2 border-b font-mono font-semibold ${r.P_MW > 0 ? "text-emerald-600" : "text-slate-600"}`}>
-                    {r.P_MW.toFixed(2)}
+                  <td className="p-2 border-b font-mono text-blue-700">{Number(r.V).toFixed(4)}</td>
+                  <td className="p-2 border-b font-mono text-slate-600">{Number(r.theta).toFixed(2)}</td>
+                  <td className={`p-2 border-b font-mono font-semibold ${Number(r.P_MW) > 0 ? "text-emerald-600" : "text-slate-600"}`}>
+                    {Number(r.P_MW).toFixed(2)}
                   </td>
-                  <td className={`p-2 border-b font-mono font-semibold ${r.Q_MVAr > 0 ? "text-amber-500" : "text-slate-600"}`}>
-                    {r.Q_MVAr.toFixed(2)}
+                  <td className={`p-2 border-b font-mono font-semibold ${Number(r.Q_MVAr) > 0 ? "text-amber-500" : "text-slate-600"}`}>
+                    {Number(r.Q_MVAr).toFixed(2)}
                   </td>
                 </tr>
               ))}
@@ -109,12 +109,12 @@ export default function Resultats({ resultats, erreur, branchFlows, loading }) {
                 {branchFlows.map((f, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
                     <td className="p-2 border-b font-bold text-slate-600">{f.from} → {f.to}</td>
-                    <td className="p-2 border-b font-mono">{f.p_from_MW.toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono">{f.q_from_MVAr.toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono">{f.p_to_MW.toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono">{f.q_to_MVAr.toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{Number(f.p_from_MW).toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{Number(f.q_from_MVAr).toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{Number(f.p_to_MW).toFixed(2)}</td>
+                    <td className="p-2 border-b font-mono">{Number(f.q_to_MVAr).toFixed(2)}</td>
                     <td className="p-2 border-b font-mono font-bold text-red-600 bg-red-50">
-                      {f.loss_MW.toFixed(3)}
+                      {Number(f.loss_MW).toFixed(3)}
                     </td>
                   </tr>
                 ))}
