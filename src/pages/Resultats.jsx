@@ -44,13 +44,13 @@ export default function Resultats({
         </div>
         <p className="font-mono text-sm bg-white p-3 rounded border border-red-100">{erreur}</p>
         <p className="text-sm mt-4 text-red-500">
-          Vérifiez que le backend Python est bien lancé et que les données saisies sont valides (le réseau a peut-être divergé).
+          Vérifiez que le backend Python est bien lancé et que les données saisies sont valides.
         </p>
       </div>
     );
   }
 
-  // 3. Aucun résultat (Protection contre le crash "null.length")
+  // 3. Aucun résultat
   if (!resultats || !Array.isArray(resultats) || resultats.length === 0) {
     return (
       <div className="p-10 text-slate-500 text-center min-h-[50vh] flex flex-col justify-center items-center">
@@ -61,7 +61,7 @@ export default function Resultats({
     );
   }
 
-  // Gestion du changement de valeur dans un champ
+  // Gestion du changement de valeur
   const handleModif = (busId, field, value) => {
     setModifs(prev => ({
       ...prev,
@@ -93,7 +93,7 @@ export default function Resultats({
     });
 
     onApplyDispositifs(facts, solars);
-    // On ne vide pas modifs pour que les valeurs restent affichées
+    // On ne vide pas les modifs pour qu'elles restent affichées
   };
 
   return (
@@ -139,6 +139,13 @@ export default function Resultats({
                 const isSolarActive = activeSolars?.some(s => s.bus_id === r.bus);
                 const isFactActive = activeFacts?.some(f => f.bus_id === r.bus);
 
+                // Définition du placeholder selon le type choisi
+                let param1Label = "—";
+                if (m.type === "SVC") param1Label = "B (pu)";
+                if (m.type === "STATCOM") param1Label = "Q (MVAr)";
+                if (m.type === "TCSC") param1Label = "% Comp";
+                if (m.type === "UPFC") param1Label = "P (MW)";
+
                 return (
                   <tr key={r.bus} className="hover:bg-slate-50 transition-colors border-b">
                     <td className="p-2 font-bold text-slate-600">{r.bus}</td>
@@ -159,22 +166,22 @@ export default function Resultats({
                         className="rounded border-slate-300 p-1 text-xs w-24 bg-white"
                       >
                         <option value="">Aucun</option>
-                        <option value="SVC">SVC/STATCOM</option>
+                        <option value="SVC">SVC</option>
+                        <option value="STATCOM">STATCOM</option>
                         <option value="TCSC">TCSC</option>
                         <option value="UPFC">UPFC</option>
                       </select>
                     </td>
                     <td className="p-2 bg-emerald-50/20">
-                      {m.type === 'SVC' && (
-                        <input type="number" step="0.01" placeholder="B (pu)" value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
-                      )}
-                      {m.type === 'TCSC' && (
-                        <input type="number" step="1" placeholder="% Comp" value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
-                      )}
-                      {m.type === 'UPFC' && (
-                        <input type="number" step="1" placeholder="P (MW)" value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
-                      )}
-                      {!m.type && <span className="text-slate-300 text-xs">—</span>}
+                      <input 
+                        type="number" 
+                        step="any" 
+                        placeholder={param1Label} 
+                        value={m.param1 ?? ""} 
+                        onChange={(e) => handleModif(r.bus, 'param1', e.target.value)}
+                        disabled={!m.type}
+                        className="w-16 p-1 border rounded text-xs text-center bg-white disabled:bg-slate-100" 
+                      />
                     </td>
                     <td className="p-2 bg-emerald-50/20">
                       {m.type === 'UPFC' && (
@@ -199,7 +206,7 @@ export default function Resultats({
           </table>
         </div>
         <p className="text-xs text-slate-500 mt-2">
-          Sélectionnez un type de FACTS et remplissez ses paramètres, ou saisissez une puissance pour un panneau solaire. Cliquez sur "Appliquer les modifications" pour recalculer.
+          Sélectionnez un type de FACTS (ex: SVC ou STATCOM) et remplissez son paramètre, ou saisissez une puissance pour un panneau solaire. Cliquez sur "Appliquer" pour recalculer.
         </p>
       </section>
 
