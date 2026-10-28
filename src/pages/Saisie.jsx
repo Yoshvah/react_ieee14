@@ -1,44 +1,5 @@
-import { useState } from "react";
-
-// ============================================================
-// DONNÉES DE RÉFÉRENCE : Réseau IEEE 14-Bus (MATPOWER)
-// ============================================================
-const DONNEES_IEEE14 = {
-  buses: [
-    [1, 3, 0, 0, 1.06, 0],
-    [2, 2, 18.3, 0, 1.045, 0],
-    [3, 2, -94.2, 0, 1.01, 0],
-    [4, 1, -47.8, 3.9, 1.0, 0],
-    [5, 1, -7.6, -1.6, 1.0, 0],
-    [6, 2, -11.2, 0, 1.07, 0],
-    [7, 1, 0, 0, 1.0, 0],
-    [8, 2, 0, 0, 1.09, 0],
-    [9, 1, -29.5, -16.6, 1.0, 0],
-    [10, 1, -9.0, -5.8, 1.0, 0],
-    [11, 1, -3.5, -1.8, 1.0, 0],
-    [12, 1, -6.1, -1.6, 1.0, 0],
-    [13, 1, -13.5, -5.8, 1.0, 0],
-    [14, 1, -14.9, -5.0, 1.0, 0]
-  ],
-  branches: [
-    [1, 2, 0.01938, 0.05917], [1, 5, 0.05403, 0.22304],
-    [2, 3, 0.04699, 0.19797], [2, 4, 0.05811, 0.17632],
-    [2, 5, 0.05695, 0.17388], [3, 4, 0.06701, 0.17103],
-    [4, 5, 0.01335, 0.04211], [4, 7, 0.0, 0.20912],
-    [4, 9, 0.0, 0.55618], [5, 6, 0.0, 0.25202],
-    [6, 11, 0.09498, 0.19890], [6, 12, 0.12291, 0.25581],
-    [6, 13, 0.06615, 0.13027], [7, 8, 0.0, 0.17615],
-    [7, 9, 0.0, 0.11001], [9, 10, 0.03181, 0.08450],
-    [9, 14, 0.12711, 0.27038], [10, 11, 0.08205, 0.19207],
-    [12, 13, 0.22092, 0.19988], [13, 14, 0.17093, 0.34802]
-  ]
-};
-
-const getTypeString = (typeNum) => {
-  if (typeNum === 3) return "Slack";
-  if (typeNum === 2) return "PV";
-  return "PQ";
-};
+// src/pages/Saisie.jsx
+import { DONNEES_IEEE14, DONNEES_INCORRECTES, getTypeString } from "../data/ieee14";
 
 // ============================================================
 // STYLES RÉUTILISABLES (Tailwind)
@@ -58,10 +19,9 @@ const reglesModification = {
 // ============================================================
 // COMPOSANT PRINCIPAL : SAISIE
 // ============================================================
-export default function Saisie({ onCalculer, onStabilite }) {
-  const [form, setForm] = useState({});
-  const [faultBus, setFaultBus] = useState(2);
-
+export default function Saisie({ 
+  form, setForm, faultBus, setFaultBus, onCalculer, onStabilite 
+}) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -93,27 +53,42 @@ export default function Saisie({ onCalculer, onStabilite }) {
     setForm(newForm);
   };
 
-  // ============================================================
-  // PRÉPARATION DU PAYLOAD (CORRIGÉ AVEC 6 PARAMÈTRES POUR LES BRANCHES)
-  // ============================================================
+  const chargerTestInvalide = () => {
+    const newForm = {};
+    DONNEES_INCORRECTES.buses.forEach((bus, i) => {
+      const idx = i + 1;
+      const [, typeNum, P, Q, V, theta] = bus;
+      newForm[`n${idx}_type`] = getTypeString(typeNum);
+      newForm[`n${idx}_p`] = P;
+      newForm[`n${idx}_q`] = Q;
+      newForm[`n${idx}_v`] = V;
+      newForm[`n${idx}_theta`] = theta;
+    });
+    DONNEES_INCORRECTES.branches.forEach((branch, i) => {
+      const idx = i + 1;
+      const [dep, arr, r, x] = branch;
+      newForm[`b${idx}_dep`] = dep;
+      newForm[`b${idx}_arr`] = arr;
+      newForm[`b${idx}_r`] = r;
+      newForm[`b${idx}_x`] = x;
+    });
+    setForm(newForm);
+  };
+
   const extraireDonnees = () => {
     const buses = [];
     const branches = [];
 
-    // Extraction des nœuds
     for (let i = 1; i <= 14; i++) {
       const typeStr = form[`n${i}_type`] || "PQ";
       const typeNum = typeStr === "Slack" ? 3 : typeStr === "PV" ? 2 : 1;
-      
       const P = Number(form[`n${i}_p`] || 0) / 100;
       const Q = Number(form[`n${i}_q`] || 0) / 100;
       const V = Number(form[`n${i}_v`] || 1.0);
       const theta = Number(form[`n${i}_theta`] || 0);
-
       buses.push([i, typeNum, P, Q, V, theta]);
     }
 
-    // Extraction des branches (AVEC B = 0 ET TAP = 0 PAR DÉFAUT)
     for (let i = 1; i <= 20; i++) {
       if (form[`b${i}_dep`] && form[`b${i}_arr`]) {
         branches.push([
@@ -121,8 +96,8 @@ export default function Saisie({ onCalculer, onStabilite }) {
           Number(form[`b${i}_arr`]),
           Number(form[`b${i}_r`] || 0),
           Number(form[`b${i}_x`] || 0.01),
-          0, // Susceptance Shunt (B)
-          0  // Tap Ratio (0 = nominal)
+          0, // B (Shunt)
+          0  // Tap
         ]);
       }
     }
@@ -132,7 +107,8 @@ export default function Saisie({ onCalculer, onStabilite }) {
 
   const lancerCalcul = () => {
     const { buses, branches } = extraireDonnees();
-    onCalculer(buses, branches);
+    // On envoie des tableaux vides pour les dispositifs initiaux
+    onCalculer(buses, branches, [], []); 
   };
 
   const lancerStabilite = () => {
@@ -140,12 +116,9 @@ export default function Saisie({ onCalculer, onStabilite }) {
     onStabilite(buses, branches, Number(faultBus));
   };
 
-  // ============================================================
-  // RENDU JSX
-  // ============================================================
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <header className="mb-8 border-b pb-4 flex justify-between items-end">
+      <header className="mb-8 border-b pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h1 className="text-3xl font-light text-slate-800">
             SPARK-Flow <span className="font-bold text-blue-600">Solver</span>
@@ -154,12 +127,21 @@ export default function Saisie({ onCalculer, onStabilite }) {
             Module de saisie (Format IEEE 14-Bus)
           </p>
         </div>
-        <button
-          onClick={chargerTestStandard}
-          className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow hover:bg-emerald-700 transition"
-        >
-          ⚡ Charger le test IEEE 14 (Standard)
-        </button>
+        
+        <div className="flex gap-2">
+          <button
+            onClick={chargerTestStandard}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow hover:bg-emerald-700 transition"
+          >
+            ⚡ Test Valide
+          </button>
+          <button
+            onClick={chargerTestInvalide}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow hover:bg-red-700 transition"
+          >
+            ⚠️ Test Invalide
+          </button>
+        </div>
       </header>
 
       <h2 className="text-lg font-semibold mb-3 text-slate-700">
@@ -198,44 +180,16 @@ export default function Saisie({ onCalculer, onStabilite }) {
                   </select>
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    name={`n${num}_p`}
-                    value={form[`n${num}_p`] ?? ""}
-                    onChange={handleChange}
-                    disabled={!isEditable(form[`n${num}_type`], "P")}
-                    className={inputStyle}
-                  />
+                  <input type="number" name={`n${num}_p`} value={form[`n${num}_p`] ?? ""} onChange={handleChange} disabled={!isEditable(form[`n${num}_type`], "P")} className={inputStyle} />
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    name={`n${num}_q`}
-                    value={form[`n${num}_q`] ?? ""}
-                    onChange={handleChange}
-                    disabled={!isEditable(form[`n${num}_type`], "Q")}
-                    className={inputStyle}
-                  />
+                  <input type="number" name={`n${num}_q`} value={form[`n${num}_q`] ?? ""} onChange={handleChange} disabled={!isEditable(form[`n${num}_type`], "Q")} className={inputStyle} />
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    name={`n${num}_v`}
-                    value={form[`n${num}_v`] ?? ""}
-                    onChange={handleChange}
-                    disabled={!isEditable(form[`n${num}_type`], "V")}
-                    className={inputStyle}
-                  />
+                  <input type="number" name={`n${num}_v`} value={form[`n${num}_v`] ?? ""} onChange={handleChange} disabled={!isEditable(form[`n${num}_type`], "V")} className={inputStyle} />
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    name={`n${num}_theta`}
-                    value={form[`n${num}_theta`] ?? ""}
-                    onChange={handleChange}
-                    disabled={!isEditable(form[`n${num}_type`], "theta")}
-                    className={inputStyle}
-                  />
+                  <input type="number" name={`n${num}_theta`} value={form[`n${num}_theta`] ?? ""} onChange={handleChange} disabled={!isEditable(form[`n${num}_type`], "theta")} className={inputStyle} />
                 </td>
               </tr>
             ))}
@@ -260,46 +214,16 @@ export default function Saisie({ onCalculer, onStabilite }) {
             {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map((num) => (
               <tr key={num} className={num % 2 === 0 ? "bg-slate-50" : ""}>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    name={`b${num}_dep`}
-                    value={form[`b${num}_dep`] ?? ""}
-                    onChange={handleChange}
-                    className={inputStyle}
-                    placeholder={num === 1 ? "1" : ""}
-                  />
+                  <input type="number" name={`b${num}_dep`} value={form[`b${num}_dep`] ?? ""} onChange={handleChange} className={inputStyle} placeholder={num === 1 ? "1" : ""} />
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    name={`b${num}_arr`}
-                    value={form[`b${num}_arr`] ?? ""}
-                    onChange={handleChange}
-                    className={inputStyle}
-                    placeholder={num === 1 ? "2" : ""}
-                  />
+                  <input type="number" name={`b${num}_arr`} value={form[`b${num}_arr`] ?? ""} onChange={handleChange} className={inputStyle} placeholder={num === 1 ? "2" : ""} />
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    step="any"
-                    name={`b${num}_r`}
-                    value={form[`b${num}_r`] ?? ""}
-                    onChange={handleChange}
-                    className={inputStyle}
-                    placeholder={num === 1 ? "0.019" : ""}
-                  />
+                  <input type="number" step="any" name={`b${num}_r`} value={form[`b${num}_r`] ?? ""} onChange={handleChange} className={inputStyle} placeholder={num === 1 ? "0.019" : ""} />
                 </td>
                 <td className={tdStyle}>
-                  <input
-                    type="number"
-                    step="any"
-                    name={`b${num}_x`}
-                    value={form[`b${num}_x`] ?? ""}
-                    onChange={handleChange}
-                    className={inputStyle}
-                    placeholder={num === 1 ? "0.059" : ""}
-                  />
+                  <input type="number" step="any" name={`b${num}_x`} value={form[`b${num}_x`] ?? ""} onChange={handleChange} className={inputStyle} placeholder={num === 1 ? "0.059" : ""} />
                 </td>
               </tr>
             ))}
@@ -307,36 +231,40 @@ export default function Saisie({ onCalculer, onStabilite }) {
         </table>
       </div>
 
-      <div className="flex flex-col md:flex-row justify-between items-center bg-white border border-slate-200 p-6 rounded-lg shadow-sm gap-6">
-        <div className="flex items-center gap-4 bg-purple-50 p-3 rounded-lg border border-purple-100">
-          <label className="text-sm font-semibold text-purple-900">
-            Bus pour le défaut (Stabilité) :
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="14"
-            value={faultBus}
-            onChange={(e) => setFaultBus(e.target.value)}
-            className="w-16 rounded border border-purple-300 bg-white p-2 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
+      {/* CONFIGURATION DU DÉFAUT (STABILITÉ) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="flex flex-col gap-3 p-4 bg-purple-50 rounded-lg border border-purple-200 shadow-sm">
+          <h3 className="font-semibold text-purple-800 text-sm flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+            Simulation de Défaut
+          </h3>
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-medium text-purple-900">Bus en défaut :</label>
+            <input
+              type="number" min="1" max="14" value={faultBus}
+              onChange={(e) => setFaultBus(e.target.value)}
+              className="w-24 rounded border border-purple-300 bg-white p-2 text-center font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          <p className="text-xs text-purple-700">Le défaut sera simulé pour le calcul de stabilité transitoire.</p>
         </div>
+      </div>
 
-        <div className="flex gap-4">
-          <button
-            onClick={lancerStabilite}
-            className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow hover:bg-purple-700 transition flex items-center gap-2"
-          >
-            📈 Simuler Stabilité
-          </button>
-          
-          <button
-            onClick={lancerCalcul}
-            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition flex items-center gap-2"
-          >
-            ⚡ Lancer Load Flow
-          </button>
-        </div>
+      {/* BOUTONS D'ACTION */}
+      <div className="flex flex-col sm:flex-row justify-end gap-4 mt-8 bg-white border border-slate-200 p-6 rounded-lg shadow-sm">
+        <button
+          onClick={lancerStabilite}
+          className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold shadow hover:bg-purple-700 transition flex items-center justify-center gap-2"
+        >
+          📈 Simuler Stabilité
+        </button>
+        
+        <button
+          onClick={lancerCalcul}
+          className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition flex items-center justify-center gap-2"
+        >
+          ⚡ Lancer Load Flow
+        </button>
       </div>
 
     </div>

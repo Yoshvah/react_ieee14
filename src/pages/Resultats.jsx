@@ -1,11 +1,35 @@
-export default function Resultats({ resultats, erreur, branchFlows, loading }) {
-  // 1. État de chargement (Spinner)
+import { useState } from "react";
+
+export default function Resultats({ 
+  resultats, erreur, branchFlows, loading, 
+  onApplyDispositifs, activeFacts, activeSolars 
+}) {
+  // Initialisation de l'état local avec les valeurs déjà appliquées
+  const [modifs, setModifs] = useState(() => {
+    const initial = {};
+    if (Array.isArray(activeFacts)) {
+      activeFacts.forEach(f => {
+        if (!initial[f.bus_id]) initial[f.bus_id] = {};
+        initial[f.bus_id].type = f.type;
+        initial[f.bus_id].param1 = f.param1;
+        initial[f.bus_id].param2 = f.param2;
+      });
+    }
+    if (Array.isArray(activeSolars)) {
+      activeSolars.forEach(s => {
+        if (!initial[s.bus_id]) initial[s.bus_id] = {};
+        initial[s.bus_id].solarP = s.active_power;
+      });
+    }
+    return initial;
+  });
+
+  // 1. Spinner de chargement
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-blue-600 min-h-[50vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
         <p className="font-semibold text-lg">Calcul de Newton-Raphson en cours...</p>
-        <p className="text-sm text-slate-500 mt-2">Résolution des équations du réseau</p>
       </div>
     );
   }
@@ -20,79 +44,169 @@ export default function Resultats({ resultats, erreur, branchFlows, loading }) {
         </div>
         <p className="font-mono text-sm bg-white p-3 rounded border border-red-100">{erreur}</p>
         <p className="text-sm mt-4 text-red-500">
-          Vérifiez que le backend Python est bien lancé (<code>uvicorn main:app --reload</code>) et que les données saisies sont valides.
+          Vérifiez que le backend Python est bien lancé et que les données saisies sont valides (le réseau a peut-être divergé).
         </p>
       </div>
     );
   }
 
-  // 3. Aucun résultat
-  if (!resultats) {
+  // 3. Aucun résultat (Protection contre le crash "null.length")
+  if (!resultats || !Array.isArray(resultats) || resultats.length === 0) {
     return (
       <div className="p-10 text-slate-500 text-center min-h-[50vh] flex flex-col justify-center items-center">
         <div className="text-4xl mb-4">⚡</div>
-        <h2 className="text-lg font-semibold text-slate-700 mb-2">Aucune simulation</h2>
-        <p>Remplissez les données dans l'onglet Saisie et lancez le Load Flow.</p>
+        <h2 className="text-lg font-semibold text-slate-700 mb-2">Aucune donnée de résultat</h2>
+        <p>Lancez un Load Flow depuis l'onglet Saisie pour afficher les données.</p>
       </div>
     );
   }
 
-  // 4. Affichage des résultats
+  // Gestion du changement de valeur dans un champ
+  const handleModif = (busId, field, value) => {
+    setModifs(prev => ({
+      ...prev,
+      [busId]: {
+        ...prev[busId],
+        [field]: value === "" ? null : (isNaN(value) ? value : Number(value))
+      }
+    }));
+  };
+
+  // Soumission globale
+  const handleApplyAll = () => {
+    const facts = [];
+    const solars = [];
+
+    Object.keys(modifs).forEach(busId => {
+      const m = modifs[busId];
+      if (m.type && m.param1 !== null && m.param1 !== undefined) {
+        facts.push({ 
+          bus_id: Number(busId), 
+          type: m.type, 
+          param1: Number(m.param1), 
+          param2: m.param2 !== null && m.param2 !== undefined ? Number(m.param2) : null 
+        });
+      }
+      if (m.solarP) {
+        solars.push({ bus_id: Number(busId), active_power: Number(m.solarP) });
+      }
+    });
+
+    onApplyDispositifs(facts, solars);
+    // On ne vide pas modifs pour que les valeurs restent affichées
+  };
+
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-8">
+    <div className="max-w-[1600px] mx-auto p-4 space-y-6">
       
-      {/* Bandeau de succès */}
-      <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex justify-between items-center shadow-sm">
+      {/* Bandeau de succès + Bouton */}
+      <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <span className="flex items-center justify-center w-8 h-8 rounded-full bg-green-200 text-green-700 font-bold">✓</span>
           <span className="font-semibold text-lg">Convergence atteinte</span>
         </div>
-        <span className="text-sm font-medium bg-green-100 px-3 py-1 rounded-full">
-          Méthode : Newton-Raphson
-        </span>
+        <button onClick={handleApplyAll} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-semibold shadow transition-colors flex items-center gap-2">
+          <span>⚙️</span> Appliquer les modifications
+        </button>
       </div>
 
-      {/* ==================================================== */}
-      {/* TABLEAU 1 : BILAN DE PUISSANCE AUX NŒUDS             */}
-      {/* ==================================================== */}
+      {/* TABLEAU UNIFIÉ : RÉSULTATS + CONTRÔLE */}
       <section>
-        <h2 className="text-xl font-bold text-slate-800 mb-4">1. Bilan de Puissance aux Nœuds</h2>
+        <h2 className="text-xl font-bold text-slate-800 mb-4">Bilan de Puissance et Contrôle des Dispositifs</h2>
         <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
           <table className="w-full text-sm text-center">
-            <thead className="bg-slate-100 font-semibold text-slate-700">
+            <thead className="bg-slate-100 font-semibold text-slate-700 text-xs uppercase tracking-wider">
               <tr>
-                <th className="p-3 border-b">Bus</th>
-                <th className="p-3 border-b">Tension V (p.u.)</th>
-                <th className="p-3 border-b">Angle θ (°)</th>
-                <th className="p-3 border-b">P injecté (MW)</th>
-                <th className="p-3 border-b">Q injecté (MVAr)</th>
+                <th className="p-3 border-b" rowSpan={2}>Bus</th>
+                <th className="p-3 border-b" rowSpan={2}>V (pu)</th>
+                <th className="p-3 border-b" rowSpan={2}>θ (°)</th>
+                <th className="p-3 border-b" rowSpan={2}>P (MW)</th>
+                <th className="p-3 border-b" rowSpan={2}>Q (MVAr)</th>
+                <th className="p-2 border-b border-l border-slate-300 text-emerald-700" colSpan={3}>Dispositif FACTS</th>
+                <th className="p-2 border-b border-l border-slate-300 text-amber-700" colSpan={2}>Solaire</th>
+              </tr>
+              <tr>
+                <th className="p-2 border-b border-l border-slate-300 bg-emerald-50/50 text-xs">Type</th>
+                <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 1</th>
+                <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 2</th>
+                <th className="p-2 border-b border-l border-slate-300 bg-amber-50/50 text-xs">P (MW)</th>
+                <th className="p-2 border-b bg-amber-50/50 text-xs">Statut</th>
               </tr>
             </thead>
             <tbody>
-              {resultats.map((r) => (
-                <tr key={r.bus} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-2 border-b font-bold text-slate-600">{r.bus}</td>
-                  <td className="p-2 border-b font-mono text-blue-700">{Number(r.V).toFixed(4)}</td>
-                  <td className="p-2 border-b font-mono text-slate-600">{Number(r.theta).toFixed(2)}</td>
-                  <td className={`p-2 border-b font-mono font-semibold ${Number(r.P_MW) > 0 ? "text-emerald-600" : "text-slate-600"}`}>
-                    {Number(r.P_MW).toFixed(2)}
-                  </td>
-                  <td className={`p-2 border-b font-mono font-semibold ${Number(r.Q_MVAr) > 0 ? "text-amber-500" : "text-slate-600"}`}>
-                    {Number(r.Q_MVAr).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
+              {resultats.map((r) => {
+                const m = modifs[r.bus] || {};
+                const isSolarActive = activeSolars?.some(s => s.bus_id === r.bus);
+                const isFactActive = activeFacts?.some(f => f.bus_id === r.bus);
+
+                return (
+                  <tr key={r.bus} className="hover:bg-slate-50 transition-colors border-b">
+                    <td className="p-2 font-bold text-slate-600">{r.bus}</td>
+                    <td className="p-2 font-mono text-blue-700 font-bold">{Number(r.V).toFixed(4)}</td>
+                    <td className="p-2 font-mono text-slate-600">{Number(r.theta).toFixed(2)}</td>
+                    <td className={`p-2 font-mono font-semibold ${r.P_MW > 0 ? "text-emerald-600" : "text-slate-600"}`}>
+                      {Number(r.P_MW).toFixed(2)}
+                    </td>
+                    <td className={`p-2 font-mono font-semibold ${r.Q_MVAr > 0 ? "text-amber-500" : "text-slate-600"}`}>
+                      {Number(r.Q_MVAr).toFixed(2)}
+                    </td>
+
+                    {/* Colonnes FACTS */}
+                    <td className="p-2 border-l border-slate-200 bg-emerald-50/20">
+                      <select 
+                        value={m.type ?? ""} 
+                        onChange={(e) => handleModif(r.bus, 'type', e.target.value)} 
+                        className="rounded border-slate-300 p-1 text-xs w-24 bg-white"
+                      >
+                        <option value="">Aucun</option>
+                        <option value="SVC">SVC/STATCOM</option>
+                        <option value="TCSC">TCSC</option>
+                        <option value="UPFC">UPFC</option>
+                      </select>
+                    </td>
+                    <td className="p-2 bg-emerald-50/20">
+                      {m.type === 'SVC' && (
+                        <input type="number" step="0.01" placeholder="B (pu)" value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
+                      )}
+                      {m.type === 'TCSC' && (
+                        <input type="number" step="1" placeholder="% Comp" value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
+                      )}
+                      {m.type === 'UPFC' && (
+                        <input type="number" step="1" placeholder="P (MW)" value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
+                      )}
+                      {!m.type && <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+                    <td className="p-2 bg-emerald-50/20">
+                      {m.type === 'UPFC' && (
+                        <input type="number" step="1" placeholder="Q (MVAr)" value={m.param2 ?? ""} onChange={(e) => handleModif(r.bus, 'param2', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
+                      )}
+                      {m.type !== 'UPFC' && <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+
+                    {/* Colonnes SOLAIRE */}
+                    <td className="p-2 border-l border-slate-200 bg-amber-50/20">
+                      <input type="number" step="1" placeholder="0" value={m.solarP ?? ""} onChange={(e) => handleModif(r.bus, 'solarP', e.target.value)} className="w-20 p-1 border rounded text-xs text-center bg-white" />
+                    </td>
+                    <td className="p-2 bg-amber-50/20 text-xs font-semibold">
+                      {isFactActive && <div className="text-emerald-600">FACTS Actif</div>}
+                      {isSolarActive && <div className="text-amber-600">PV Actif</div>}
+                      {!isFactActive && !isSolarActive && <span className="text-slate-300">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-slate-500 mt-2">
+          Sélectionnez un type de FACTS et remplissez ses paramètres, ou saisissez une puissance pour un panneau solaire. Cliquez sur "Appliquer les modifications" pour recalculer.
+        </p>
       </section>
 
-      {/* ==================================================== */}
-      {/* TABLEAU 2 : FLUX ET PERTES DANS LES LIGNES           */}
-      {/* ==================================================== */}
-      {branchFlows && branchFlows.length > 0 && (
+      {/* TABLEAU 2 : FLUX ET PERTES */}
+      {branchFlows && Array.isArray(branchFlows) && branchFlows.length > 0 && (
         <section>
-          <h2 className="text-xl font-bold text-slate-800 mb-4">2. Transits et Pertes de Lignes</h2>
+          <h2 className="text-xl font-bold text-slate-800 mb-4">Transits et Pertes de Lignes</h2>
           <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
             <table className="w-full text-sm text-center">
               <thead className="bg-slate-100 font-semibold text-slate-700">
@@ -107,15 +221,13 @@ export default function Resultats({ resultats, erreur, branchFlows, loading }) {
               </thead>
               <tbody>
                 {branchFlows.map((f, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                  <tr key={idx} className="hover:bg-slate-50">
                     <td className="p-2 border-b font-bold text-slate-600">{f.from} → {f.to}</td>
                     <td className="p-2 border-b font-mono">{Number(f.p_from_MW).toFixed(2)}</td>
                     <td className="p-2 border-b font-mono">{Number(f.q_from_MVAr).toFixed(2)}</td>
                     <td className="p-2 border-b font-mono">{Number(f.p_to_MW).toFixed(2)}</td>
                     <td className="p-2 border-b font-mono">{Number(f.q_to_MVAr).toFixed(2)}</td>
-                    <td className="p-2 border-b font-mono font-bold text-red-600 bg-red-50">
-                      {Number(f.loss_MW).toFixed(3)}
-                    </td>
+                    <td className="p-2 border-b font-mono font-bold text-red-600 bg-red-50">{Number(f.loss_MW).toFixed(3)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -123,7 +235,6 @@ export default function Resultats({ resultats, erreur, branchFlows, loading }) {
           </div>
         </section>
       )}
-
     </div>
   );
 }

@@ -7,33 +7,53 @@ import Schema from "./pages/Schema";
 
 export default function App() {
   const [loading, setLoading] = useState(false);
-
-  // --- États persistants (ils gardent leur valeur entre les onglets) ---
+  
+  // ============================================================
+  // ÉTATS POUR LES RÉSULTATS ET DISPOSITIFS
+  // ============================================================
   const [resultats, setResultats] = useState(null);
   const [history, setHistory] = useState(null);
   const [erreur, setErreur] = useState(null);
   const [ybusData, setYbusData] = useState(null);
   const [branchFlows, setBranchFlows] = useState(null);
   const [stabilityData, setStabilityData] = useState(null);
+  
+  const [activeFacts, setActiveFacts] = useState([]); 
+  const [activeSolars, setActiveSolars] = useState([]); 
+  const [currentNetwork, setCurrentNetwork] = useState(null); 
 
-  // --- Navigation ---
+  // ============================================================
+  // ÉTATS PERSISTANTS DU FORMULAIRE SAISIE
+  // ============================================================
+  const [form, setForm] = useState({});
+  const [faultBus, setFaultBus] = useState(2);
+
+  // ============================================================
+  // NAVIGATION
+  // ============================================================
   const [page, setPage] = useState("saisie");
 
   // ============================================================
   // LANCEMENT DU LOAD FLOW
   // ============================================================
-  const lancerSimulation = async (buses, branches) => {
-    // ON NE VIDE PLUS : setResultats(null), setHistory(null), etc.
-    // On efface juste l'erreur précédente
+  const lancerSimulation = async (buses, branches, facts, solars) => {
+    // 🔒 Blindage : si null/undefined, on remplace par un tableau vide
+    const safeFacts  = Array.isArray(facts)  ? facts  : [];
+    const safeSolars = Array.isArray(solars) ? solars : [];
+
     setErreur(null);
     setLoading(true);
-    setPage("resultats"); // On va sur l'onglet résultats pour voir le spinner
+    setPage("resultats");
+    setCurrentNetwork({ buses, branches }); 
 
     try {
+      const body = { buses, branches };
+      if (safeFacts.length > 0)  body.facts  = safeFacts;
+      if (safeSolars.length > 0) body.solars = safeSolars;
+
       const reponse = await fetch("http://127.0.0.1:8000/api/loadflow", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ buses, branches }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
 
       if (!reponse.ok) {
@@ -43,17 +63,33 @@ export default function App() {
 
       const data = await reponse.json();
       
-      // On écrase avec les nouveaux résultats seulement si succès
+      if (!data || !data.results) {
+        throw new Error("Le serveur n'a pas renvoyé de résultats valides.");
+      }
+
       setResultats(data.results);
       setHistory(data.history);
       setYbusData(data.ybus);
-      setBranchFlows(data.branch_flows);
+      setBranchFlows(data.branch_flows || []);
       
-      setLoading(false);
+      setActiveFacts(safeFacts);
+      setActiveSolars(safeSolars);
+      
     } catch (err) {
+      console.error(err);
       setErreur(err.message);
-      // On garde les anciens resultats/history en cas d'erreur !
+      setResultats(null);
+    } finally {
       setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // APPLICATION DES DISPOSITIFS (depuis l'onglet Résultats)
+  // ============================================================
+  const appliquerDispositifs = (facts, solars) => {
+    if (currentNetwork) {
+      lancerSimulation(currentNetwork.buses, currentNetwork.branches, facts, solars);
     }
   };
 
@@ -61,43 +97,42 @@ export default function App() {
   // LANCEMENT DE LA STABILITÉ
   // ============================================================
   const lancerStabilite = async (buses, branches, faultBus) => {
+    setStabilityData(null);
     setLoading(true);
     setPage("stabilite");
 
     try {
       const reponse = await fetch("http://127.0.0.1:8000/api/stability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ buses, branches, fault_bus: faultBus, duration: 5.0 }),
       });
 
       if (!reponse.ok) {
         const errData = await reponse.json();
-        throw new Error(errData.detail || "Erreur de stabilité");
+        throw new Error(errData.detail || "Erreur lors du calcul de stabilité");
       }
 
       const data = await reponse.json();
       setStabilityData(data);
-      setLoading(false);
     } catch (err) {
       console.error(err);
       alert("Erreur de stabilité : " + err.message);
+    } finally {
       setLoading(false);
     }
   };
 
   // ============================================================
-  // BOUTON DE RÉINITIALISATION MANUELLE
+  // RÉINITIALISATION
   // ============================================================
   const reinitialiserDonnees = () => {
     if (window.confirm("Voulez-vous vraiment effacer toutes les données calculées ?")) {
-      setResultats(null);
-      setHistory(null);
-      setYbusData(null);
-      setBranchFlows(null);
-      setStabilityData(null);
-      setErreur(null);
-      setPage("saisie");
+      setResultats(null); setHistory(null); setYbusData(null);
+      setBranchFlows(null); setStabilityData(null); 
+      setActiveFacts([]); setActiveSolars([]); 
+      setCurrentNetwork(null); 
+      setErreur(null); setPage("saisie");
+      // Optionnel : setForm({}) pour vider aussi le formulaire
     }
   };
 
@@ -110,17 +145,20 @@ export default function App() {
         <h1 className="text-xl font-bold text-blue-700 tracking-tight">SPARK-Flow</h1>
         
         <div className="flex gap-6 flex-1">
-          <button onClick={() => setPage("saisie")} className={page === "saisie" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Saisie</button>
-          <button onClick={() => setPage("schema")} className={page === "schema" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Schéma Réseau</button>
-          <button onClick={() => setPage("resultats")} className={page === "resultats" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Résultats</button>
-          <button onClick={() => setPage("etapes")} className={page === "etapes" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Étapes</button>
-          <button onClick={() => setPage("stabilite")} className={page === "stabilite" ? "font-semibold text-blue-600" : "text-slate-500 hover:text-slate-800 transition"}>Stabilité</button>
+          {["saisie", "schema", "resultats", "etapes", "stabilite"].map(p => (
+            <button 
+              key={p} 
+              onClick={() => setPage(p)} 
+              className={page === p ? "font-semibold text-blue-600 capitalize" : "text-slate-500 hover:text-slate-800 transition capitalize"}
+            >
+              {p === "schema" ? "Schéma" : p === "etapes" ? "Étapes" : p}
+            </button>
+          ))}
         </div>
 
-        {/* BOUTON DE RESET */}
         {(resultats || stabilityData) && (
           <button 
-            onClick={reinitialiserDonnees}
+            onClick={reinitialiserDonnees} 
             className="text-xs text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md font-semibold transition-colors"
           >
             Réinitialiser
@@ -129,11 +167,48 @@ export default function App() {
       </nav>
 
       <main className="p-6">
-        {page === "saisie" && <Saisie onCalculer={lancerSimulation} onStabilite={lancerStabilite} />}
-        {page === "schema" && <Schema resultats={resultats} />}
-        {page === "resultats" && <Resultats resultats={resultats} erreur={erreur} branchFlows={branchFlows} loading={loading} />}
-        {page === "etapes" && <Etapes history={history} ybusData={ybusData} branchFlows={branchFlows} />}
-        {page === "stabilite" && <Stabilite data={stabilityData} />}
+        {page === "saisie" && (
+          <Saisie 
+            form={form} 
+            setForm={setForm} 
+            faultBus={faultBus} 
+            setFaultBus={setFaultBus} 
+            onCalculer={lancerSimulation} 
+            onStabilite={lancerStabilite} 
+          />
+        )}
+        
+        {page === "schema" && (
+          <Schema 
+            resultats={resultats} 
+            facts={activeFacts} 
+            solars={activeSolars} 
+          />
+        )}
+        
+        {page === "resultats" && (
+          <Resultats 
+            resultats={resultats} 
+            erreur={erreur} 
+            branchFlows={branchFlows} 
+            loading={loading} 
+            onApplyDispositifs={appliquerDispositifs}
+            activeFacts={activeFacts}
+            activeSolars={activeSolars}
+          />
+        )}
+        
+        {page === "etapes" && (
+          <Etapes 
+            history={history} 
+            ybusData={ybusData} 
+            branchFlows={branchFlows} 
+          />
+        )}
+        
+        {page === "stabilite" && (
+          <Stabilite data={stabilityData} />
+        )}
       </main>
     </div>
   );
