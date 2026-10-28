@@ -9,10 +9,12 @@ export default function Resultats({
     const initial = {};
     if (Array.isArray(activeFacts)) {
       activeFacts.forEach(f => {
-        if (!initial[f.bus_id]) initial[f.bus_id] = {};
-        initial[f.bus_id].type = f.type;
-        initial[f.bus_id].param1 = f.param1;
-        initial[f.bus_id].param2 = f.param2;
+        if (f.bus_id) {
+          if (!initial[f.bus_id]) initial[f.bus_id] = {};
+          initial[f.bus_id].type = f.type;
+          initial[f.bus_id].param1 = f.param1;
+          initial[f.bus_id].param2 = f.param2;
+        }
       });
     }
     if (Array.isArray(activeSolars)) {
@@ -43,9 +45,6 @@ export default function Resultats({
           <h2 className="text-lg font-bold">Erreur de calcul</h2>
         </div>
         <p className="font-mono text-sm bg-white p-3 rounded border border-red-100">{erreur}</p>
-        <p className="text-sm mt-4 text-red-500">
-          Vérifiez que le backend Python est bien lancé et que les données saisies sont valides.
-        </p>
       </div>
     );
   }
@@ -80,12 +79,22 @@ export default function Resultats({
     Object.keys(modifs).forEach(busId => {
       const m = modifs[busId];
       if (m.type && m.param1 !== null && m.param1 !== undefined) {
-        facts.push({ 
-          bus_id: Number(busId), 
-          type: m.type, 
-          param1: Number(m.param1), 
-          param2: m.param2 !== null && m.param2 !== undefined ? Number(m.param2) : null 
-        });
+        if (m.type === "TCSC" && m.targetBranch !== undefined && m.targetBranch !== null) {
+          // Pour le TCSC, on envoie branch_index et on n'a pas besoin de bus_id
+          facts.push({ 
+            branch_index: Number(m.targetBranch), 
+            type: "TCSC", 
+            param1: Number(m.param1) 
+          });
+        } else if (m.type !== "TCSC") {
+          // Pour les autres, on envoie bus_id
+          facts.push({ 
+            bus_id: Number(busId), 
+            type: m.type, 
+            param1: Number(m.param1), 
+            param2: m.param2 !== null && m.param2 !== undefined ? Number(m.param2) : null 
+          });
+        }
       }
       if (m.solarP) {
         solars.push({ bus_id: Number(busId), active_power: Number(m.solarP) });
@@ -110,7 +119,7 @@ export default function Resultats({
         </button>
       </div>
 
-      {/* TABLEAU UNIFIÉ : RÉSULTATS + CONTRÔLE */}
+      {/* TABLEAU UNIFIÉ */}
       <section>
         <h2 className="text-xl font-bold text-slate-800 mb-4">Bilan de Puissance et Contrôle des Dispositifs</h2>
         <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
@@ -122,13 +131,14 @@ export default function Resultats({
                 <th className="p-3 border-b" rowSpan={2}>θ (°)</th>
                 <th className="p-3 border-b" rowSpan={2}>P (MW)</th>
                 <th className="p-3 border-b" rowSpan={2}>Q (MVAr)</th>
-                <th className="p-2 border-b border-l border-slate-300 text-emerald-700" colSpan={3}>Dispositif FACTS</th>
+                <th className="p-2 border-b border-l border-slate-300 text-emerald-700" colSpan={4}>Dispositif FACTS</th>
                 <th className="p-2 border-b border-l border-slate-300 text-amber-700" colSpan={2}>Solaire</th>
               </tr>
               <tr>
                 <th className="p-2 border-b border-l border-slate-300 bg-emerald-50/50 text-xs">Type</th>
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 1</th>
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 2</th>
+                <th className="p-2 border-b bg-emerald-50/50 text-xs">Ligne (TCSC)</th>
                 <th className="p-2 border-b border-l border-slate-300 bg-amber-50/50 text-xs">P (MW)</th>
                 <th className="p-2 border-b bg-amber-50/50 text-xs">Statut</th>
               </tr>
@@ -137,9 +147,8 @@ export default function Resultats({
               {resultats.map((r) => {
                 const m = modifs[r.bus] || {};
                 const isSolarActive = activeSolars?.some(s => s.bus_id === r.bus);
-                const isFactActive = activeFacts?.some(f => f.bus_id === r.bus);
+                const isFactActive = activeFacts?.some(f => f.bus_id === r.bus || (f.type === "TCSC" && f.branch_index !== undefined));
 
-                // Définition du placeholder selon le type choisi
                 let param1Label = "—";
                 if (m.type === "SVC") param1Label = "B (pu)";
                 if (m.type === "STATCOM") param1Label = "Q (MVAr)";
@@ -174,11 +183,8 @@ export default function Resultats({
                     </td>
                     <td className="p-2 bg-emerald-50/20">
                       <input 
-                        type="number" 
-                        step="any" 
-                        placeholder={param1Label} 
-                        value={m.param1 ?? ""} 
-                        onChange={(e) => handleModif(r.bus, 'param1', e.target.value)}
+                        type="number" step="any" placeholder={param1Label} 
+                        value={m.param1 ?? ""} onChange={(e) => handleModif(r.bus, 'param1', e.target.value)}
                         disabled={!m.type}
                         className="w-16 p-1 border rounded text-xs text-center bg-white disabled:bg-slate-100" 
                       />
@@ -188,6 +194,24 @@ export default function Resultats({
                         <input type="number" step="1" placeholder="Q (MVAr)" value={m.param2 ?? ""} onChange={(e) => handleModif(r.bus, 'param2', e.target.value)} className="w-16 p-1 border rounded text-xs text-center bg-white" />
                       )}
                       {m.type !== 'UPFC' && <span className="text-slate-300 text-xs">—</span>}
+                    </td>
+
+                    {/* Nouvelle colonne pour le choix de la LIGNE (TCSC) */}
+                    <td className="p-2 bg-emerald-50/20">
+                      {m.type === 'TCSC' && branchFlows ? (
+                        <select 
+                          value={m.targetBranch ?? ""} 
+                          onChange={(e) => handleModif(r.bus, 'targetBranch', e.target.value)} 
+                          className="rounded border-slate-300 p-1 text-xs w-28 bg-white"
+                        >
+                          <option value="">Choisir...</option>
+                          {branchFlows.map((b, i) => (
+                            <option key={i} value={i}>Ligne {b.from}-{b.to}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
                     </td>
 
                     {/* Colonnes SOLAIRE */}
@@ -205,9 +229,6 @@ export default function Resultats({
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-slate-500 mt-2">
-          Sélectionnez un type de FACTS (ex: SVC ou STATCOM) et remplissez son paramètre, ou saisissez une puissance pour un panneau solaire. Cliquez sur "Appliquer" pour recalculer.
-        </p>
       </section>
 
       {/* TABLEAU 2 : FLUX ET PERTES */}
