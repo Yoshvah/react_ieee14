@@ -4,6 +4,7 @@ import Resultats from "./pages/Resultats";
 import Etapes from "./pages/Etapes";
 import Stabilite from "./pages/Stabilite";
 import Schema from "./pages/Schema";
+import Optimisation from "./pages/Optimisation"; // NOUVEL IMPORT
 
 export default function App() {
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,6 @@ export default function App() {
   // LANCEMENT DU LOAD FLOW
   // ============================================================
   const lancerSimulation = async (buses, branches, facts, solars) => {
-    // 🔒 Blindage : si null/undefined, on remplace par un tableau vide
     const safeFacts  = Array.isArray(facts)  ? facts  : [];
     const safeSolars = Array.isArray(solars) ? solars : [];
 
@@ -62,16 +62,12 @@ export default function App() {
       }
 
       const data = await reponse.json();
-      
-      if (!data || !data.results) {
-        throw new Error("Le serveur n'a pas renvoyé de résultats valides.");
-      }
+      if (!data || !data.results) throw new Error("Le serveur n'a pas renvoyé de résultats valides.");
 
       setResultats(data.results);
       setHistory(data.history);
       setYbusData(data.ybus);
       setBranchFlows(data.branch_flows || []);
-      
       setActiveFacts(safeFacts);
       setActiveSolars(safeSolars);
       
@@ -85,7 +81,7 @@ export default function App() {
   };
 
   // ============================================================
-  // APPLICATION DES DISPOSITIFS (depuis l'onglet Résultats)
+  // APPLICATION DES DISPOSITIFS
   // ============================================================
   const appliquerDispositifs = (facts, solars) => {
     if (currentNetwork) {
@@ -132,7 +128,6 @@ export default function App() {
       setActiveFacts([]); setActiveSolars([]); 
       setCurrentNetwork(null); 
       setErreur(null); setPage("saisie");
-      // Optionnel : setForm({}) pour vider aussi le formulaire
     }
   };
 
@@ -145,13 +140,14 @@ export default function App() {
         <h1 className="text-xl font-bold text-blue-700 tracking-tight">SPARK-Flow</h1>
         
         <div className="flex gap-6 flex-1">
-          {["saisie", "schema", "resultats", "etapes", "stabilite"].map(p => (
+          {/* Ajout de "optimisation" dans le tableau */}
+          {["saisie", "schema", "resultats", "etapes", "stabilite", "optimisation"].map(p => (
             <button 
               key={p} 
               onClick={() => setPage(p)} 
               className={page === p ? "font-semibold text-blue-600 capitalize" : "text-slate-500 hover:text-slate-800 transition capitalize"}
             >
-              {p === "schema" ? "Schéma" : p === "etapes" ? "Étapes" : p}
+              {p === "schema" ? "Schéma" : p === "etapes" ? "Étapes" : p === "optimisation" ? "Optimisation" : p}
             </button>
           ))}
         </div>
@@ -208,6 +204,11 @@ export default function App() {
         
         {page === "stabilite" && (
           <Stabilite data={stabilityData} />
+        )}
+
+        {/* NOUVELLE PAGE OPTIMISATION */}
+        {page === "optimisation" && (
+          <Optimisation form={form} />
         )}
       </main>
     </div>

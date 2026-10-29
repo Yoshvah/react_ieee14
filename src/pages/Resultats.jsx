@@ -99,18 +99,10 @@ export default function Resultats({
         </button>
       </div>
 
-      {/* TABLEAU UNIFIÉ (SANS STATUT) */}
+      {/* TABLEAU UNIFIÉ (SOLAIRE AVANT FACTS) */}
       <section>
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
           <h2 className="text-xl font-bold text-slate-800">Bilan de Puissance et Contrôle des Dispositifs</h2>
-          
-          {/* LÉGENDE DES COULEURS */}
-          <div className="flex flex-wrap gap-3 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500"></span> Tension (V)</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-indigo-500"></span> Angle (θ)</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> P Active</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500"></span> Q Réactive</span>
-          </div>
         </div>
 
         <div className="overflow-x-auto border rounded-lg shadow-sm bg-white">
@@ -122,15 +114,22 @@ export default function Resultats({
                 <th className="p-3 border-b" rowSpan={2}>θ (°)</th>
                 <th className="p-3 border-b" rowSpan={2}>P (MW)</th>
                 <th className="p-3 border-b" rowSpan={2}>Q (MVAr)</th>
-                <th className="p-2 border-b border-l border-slate-300 text-emerald-700" colSpan={4}>Dispositif FACTS</th>
+                
+                {/* COLONNE SOLAIRE (DÉPLACÉE) */}
                 <th className="p-2 border-b border-l border-slate-300 text-amber-700" colSpan={1}>Solaire</th>
+                
+                {/* COLONNE FACTS */}
+                <th className="p-2 border-b border-l border-slate-300 text-emerald-700" colSpan={4}>Dispositif FACTS</th>
               </tr>
               <tr>
+                {/* Sous-colonne Solaire */}
+                <th className="p-2 border-b border-l border-slate-300 bg-amber-50/50 text-xs">P (MW)</th>
+                
+                {/* Sous-colonnes FACTS */}
                 <th className="p-2 border-b border-l border-slate-300 bg-emerald-50/50 text-xs">Type</th>
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 1</th>
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Param 2</th>
                 <th className="p-2 border-b bg-emerald-50/50 text-xs">Ligne (TCSC)</th>
-                <th className="p-2 border-b border-l border-slate-300 bg-amber-50/50 text-xs">P (MW)</th>
               </tr>
             </thead>
             <tbody>
@@ -167,7 +166,12 @@ export default function Resultats({
                       {Number(r.Q_MVAr).toFixed(2)}
                     </td>
 
-                    {/* Colonnes FACTS */}
+                    {/* 1. Colonne Solaire */}
+                    <td className="p-2 border-l border-slate-200 bg-amber-50/10">
+                      <input type="number" step="1" placeholder="0" value={m.solarP ?? ""} onChange={(e) => handleModif(r.bus, 'solarP', e.target.value)} className="w-20 p-1 border rounded text-xs text-center bg-white" />
+                    </td>
+
+                    {/* 2. Colonnes FACTS */}
                     <td className="p-2 border-l border-slate-200 bg-emerald-50/10">
                       <select 
                         value={m.type ?? ""} 
@@ -195,8 +199,6 @@ export default function Resultats({
                       )}
                       {m.type !== 'UPFC' && <span className="text-slate-300 text-xs">—</span>}
                     </td>
-
-                    {/* Ligne ciblée (TCSC) */}
                     <td className="p-2 bg-emerald-50/10">
                       {m.type === 'TCSC' && branchFlows ? (
                         <select 
@@ -213,11 +215,6 @@ export default function Resultats({
                         <span className="text-slate-300 text-xs">—</span>
                       )}
                     </td>
-
-                    {/* Colonne SOLAIRE */}
-                    <td className="p-2 border-l border-slate-200 bg-amber-50/10">
-                      <input type="number" step="1" placeholder="0" value={m.solarP ?? ""} onChange={(e) => handleModif(r.bus, 'solarP', e.target.value)} className="w-20 p-1 border rounded text-xs text-center bg-white" />
-                    </td>
                   </tr>
                 );
               })}
@@ -226,13 +223,12 @@ export default function Resultats({
         </div>
       </section>
 
-      {/* TABLEAU 2 : FLUX ET PERTES (Design d'origine conservé) */}
+      {/* TABLEAU 2 : FLUX ET PERTES */}
       {branchFlows && Array.isArray(branchFlows) && branchFlows.length > 0 && (
         <section>
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <h2 className="text-xl font-bold text-slate-800">Transits et Pertes de Lignes</h2>
             
-            {/* LÉGENDE POUR LE TABLEAU 2 */}
             <div className="flex flex-wrap gap-3 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> P Transitée</span>
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500"></span> Q Transité</span>
@@ -240,7 +236,7 @@ export default function Resultats({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-500 bg-white shadow-lg shadow-slate-200/50">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-200/50">
             <table className="w-full min-w-[760px] text-sm text-center">
               <thead className="bg-slate-100 font-semibold text-slate-700 text-xs uppercase tracking-wider">
                 <tr>
